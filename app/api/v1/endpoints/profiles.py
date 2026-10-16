@@ -2,6 +2,7 @@
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,84 @@ from app.schemas.profile import (
 
 logger = logging.getLogger("kuru.profiles")
 router = APIRouter()
+
+
+class ProfileSyncRequest(BaseModel):
+    """Payload to synchronize guided onboarding profile to PostgreSQL."""
+
+    full_name: str = Field(..., min_length=1, max_length=255)
+    email: str | None = None
+    degree: str | None = None
+    institution: str | None = None
+    graduation_year: int | None = None
+    target_roles: list[str] = Field(default_factory=list)
+    preferred_locations: list[str] = Field(default_factory=list)
+    interests: list[str] = Field(default_factory=list)
+    bio: str | None = None
+
+
+@router.post(
+    "/sync",
+    response_model=StudentProfileResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Synchronize Onboarding Profile to PostgreSQL",
+    description="Idempotently creates or updates the student's career profile from verified onboarding data.",
+)
+async def sync_profile(
+    payload: ProfileSyncRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StudentProfile:
+    """Create or update profile idempotently upon onboarding completion."""
+    stmt = select(StudentProfile).where(StudentProfile.firebase_uid == current_user.uid)
+    result = await db.execute(stmt)
+    profile = result.scalar_one_or_none()
+
+    education_data = []
+    if payload.institution or payload.degree:
+        education_data.append({
+            "institution": payload.institution or "Institution",
+            "degree": payload.degree or "Degree",
+            "field_of_study": None,
+            "start_year": None,
+            "end_year": payload.graduation_year,
+            "grade_or_cgpa": None,
+        })
+
+    if profile:
+        profile.full_name = payload.full_name or profile.full_name
+        if payload.email:
+            profile.email = payload.email
+        if education_data:
+            profile.education = education_data
+        if payload.interests:
+            profile.interests = payload.interests
+        if payload.target_roles:
+            profile.target_roles = payload.target_roles
+        if payload.preferred_locations:
+            profile.preferred_locations = payload.preferred_locations
+        if payload.bio:
+            profile.bio = payload.bio
+        await db.commit()
+        await db.refresh(profile)
+        logger.info("Synchronized existing profile for user %s", current_user.uid)
+        return profile
+
+    new_profile = StudentProfile(
+        firebase_uid=current_user.uid,
+        full_name=payload.full_name,
+        email=payload.email or current_user.email,
+        education=education_data,
+        interests=payload.interests,
+        target_roles=payload.target_roles,
+        preferred_locations=payload.preferred_locations,
+        bio=payload.bio,
+    )
+    db.add(new_profile)
+    await db.commit()
+    await db.refresh(new_profile)
+    logger.info("Synchronized new profile for user %s", current_user.uid)
+    return new_profile
 
 
 @router.post(

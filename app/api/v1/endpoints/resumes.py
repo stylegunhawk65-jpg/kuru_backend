@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthenticatedUser, get_current_user
@@ -18,6 +19,40 @@ from app.services.resume.service import resume_service
 
 logger = logging.getLogger("kuru.resumes.api")
 router = APIRouter()
+
+
+class ResumeTailorRequest(BaseModel):
+    """Payload to tailor resume for role and company."""
+
+    target_role: str = Field(default="Software Engineer", description="Target role name")
+    target_company: str | None = Field(default=None, description="Target company name")
+    job_id: str | None = Field(default=None, description="Optional job ID")
+
+
+@router.post(
+    "/tailor",
+    response_model=ResumeResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Tailor Resume for Role and Company",
+    description="Synthesize an ATS resume tailored for a specific role and company.",
+)
+async def tailor_resume(
+    payload: ResumeTailorRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Tailor resume for role and company."""
+    gen_req = ResumeGenerateRequest(
+        target_role=payload.target_role,
+        job_id=payload.job_id,
+        custom_instructions=f"Target company: {payload.target_company}" if payload.target_company else None,
+        save_to_db=True,
+    )
+    return await resume_service.generate_resume(
+        db=db,
+        firebase_uid=current_user.uid,
+        request=gen_req,
+    )
 
 
 @router.post(
