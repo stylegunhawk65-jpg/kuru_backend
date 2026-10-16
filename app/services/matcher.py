@@ -36,6 +36,10 @@ class JobMatchResult:
     matched_skills: list[str] = field(default_factory=list)
     missing_skills: list[str] = field(default_factory=list)
     match_reasons: list[str] = field(default_factory=list)
+    demonstrated_skills: list[str] = field(default_factory=list)
+    repo_supported_skills: list[str] = field(default_factory=list)
+    unverified_matched_skills: list[str] = field(default_factory=list)
+    missing_skills_breakdown: list[dict[str, Any]] = field(default_factory=list)
 
 
 def calculate_job_match(
@@ -55,20 +59,25 @@ def calculate_job_match(
     match_reasons: list[str] = []
     matched_skills: list[str] = []
     missing_skills: list[str] = []
+    demonstrated_skills: list[str] = []
+    repo_supported_skills: list[str] = []
+    unverified_matched_skills: list[str] = []
+    missing_skills_breakdown: list[dict[str, Any]] = []
 
-    # Map user's evidence-backed skills: norm_name -> (original_name, confidence)
-    user_skills_map: dict[str, tuple[str, float]] = {}
+    # Map user's evidence-backed skills: norm_name -> (original_name, confidence, verification_status)
+    user_skills_map: dict[str, tuple[str, float, str]] = {}
     for s in skills:
         norm = normalize_skill(s.skill_name)
         if norm:
-            user_skills_map[norm] = (s.skill_name, float(s.confidence_score))
+            v_status = getattr(s, "verification_status", "repository_supported")
+            user_skills_map[norm] = (s.skill_name, float(s.confidence_score), v_status)
 
     # Also consider profile interests as minor skill signals (0.70 baseline confidence)
     if profile and profile.interests:
         for item in profile.interests:
             norm = normalize_skill(item)
             if norm and norm not in user_skills_map:
-                user_skills_map[norm] = (item, 0.70)
+                user_skills_map[norm] = (item, 0.70, "not_yet_verified")
 
     # 1. Evidence-backed Skills (50% max)
     required_skills = job.required_skills or []
@@ -83,12 +92,23 @@ def calculate_job_match(
         for req in required_skills:
             norm_req = normalize_skill(req)
             if norm_req in user_skills_map:
-                orig_name, conf = user_skills_map[norm_req]
+                orig_name, conf, v_status = user_skills_map[norm_req]
                 matched_skills.append(req)
                 item_score = skill_weight_per_item * conf
                 accumulated_skill_score += item_score
+                if v_status == "practically_demonstrated":
+                    demonstrated_skills.append(req)
+                elif v_status == "repository_supported":
+                    repo_supported_skills.append(req)
+                else:
+                    unverified_matched_skills.append(req)
             else:
                 missing_skills.append(req)
+                missing_skills_breakdown.append({
+                    "skill_name": req,
+                    "gap_type": "absent_evidence",
+                    "reason": f"Required by '{job.title}' at {job.company}, but absent from candidate's verified skills.",
+                })
 
         total_score += accumulated_skill_score
         pct = int(round((len(matched_skills) / len(required_skills)) * 100))
@@ -96,13 +116,18 @@ def calculate_job_match(
             f"Skill match: {len(matched_skills)}/{len(required_skills)} required skills ({pct}%): "
             f"{', '.join(matched_skills) if matched_skills else 'None'} (+{accumulated_skill_score:.1f} pts)."
         )
-        demonstrated = [
-            s.skill_name for s in skills if getattr(s, "verification_status", None) == "practically_demonstrated"
-        ]
-        if demonstrated:
-            demo_matched = [m for m in matched_skills if any(d.lower() in m.lower() for d in demonstrated)]
-            if demo_matched:
-                match_reasons.append(f"Practically verified skills demonstrated in code assessment: {', '.join(demo_matched)}.")
+        if demonstrated_skills:
+            match_reasons.append(
+                f"Practically verified skills demonstrated in code assessment: {', '.join(demonstrated_skills)}."
+            )
+        if repo_supported_skills:
+            match_reasons.append(
+                f"Repository-supported skills from code analysis: {', '.join(repo_supported_skills)}."
+            )
+        if unverified_matched_skills:
+            match_reasons.append(
+                f"Interest alignment only (not yet verified with code): {', '.join(unverified_matched_skills)}."
+            )
         if missing_skills:
             match_reasons.append(f"Missing required skills for role: {', '.join(missing_skills)}.")
 
@@ -203,5 +228,9 @@ def calculate_job_match(
         match_score=final_score,
         matched_skills=matched_skills,
         missing_skills=missing_skills,
+        demonstrated_skills=demonstrated_skills,
+        repo_supported_skills=repo_supported_skills,
+        unverified_matched_skills=unverified_matched_skills,
+        missing_skills_breakdown=missing_skills_breakdown,
         match_reasons=match_reasons,
     )

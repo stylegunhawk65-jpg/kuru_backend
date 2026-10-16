@@ -42,6 +42,7 @@ class SkillGapAgent:
                     market_demand_pct=g["market_demand_pct"],
                     graph_proximity=g["graph_proximity"],
                     reasons=g["reasons"],
+                    gap_type=g.get("gap_type"),
                 )
             )
 
@@ -55,6 +56,7 @@ class SkillGapAgent:
                     market_demand_pct=80.0,
                     graph_proximity="1-Hop (Adjacent)",
                     reasons=["Required by 80% of backend postings", "Essential for containerization"],
+                    gap_type="absent_evidence",
                 ),
                 PrioritizedSkillGapItem(
                     skill_name="Redis",
@@ -63,6 +65,7 @@ class SkillGapAgent:
                     market_demand_pct=65.0,
                     graph_proximity="1-Hop (Adjacent)",
                     reasons=["Frequent requirement for high-throughput microservices"],
+                    gap_type="absent_evidence",
                 ),
             ]
 

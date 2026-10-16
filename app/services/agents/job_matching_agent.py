@@ -38,6 +38,22 @@ class JobMatchingAgent:
         skills_res = await db.execute(skills_stmt)
         skills = list(skills_res.scalars().all())
 
+        # Check if user has passed practical assessments that reinforce practically_demonstrated status
+        from app.models.assessment import PracticalAssessment
+        pa_stmt = select(PracticalAssessment).where(
+            PracticalAssessment.firebase_uid == firebase_uid,
+            PracticalAssessment.passed == True,
+        )
+        pa_res = await db.execute(pa_stmt)
+        passed_assessments = pa_res.scalars().all()
+        passed_skill_names = {a.skill_name.lower() for a in passed_assessments}
+
+        for s in skills:
+            if s.skill_name.lower() in passed_skill_names:
+                s.verification_status = "practically_demonstrated"
+                if s.confidence_score < 0.90:
+                    s.confidence_score = 0.95
+
         # If user has no skills in DB yet, synthesize temporary StudentSkill for scoring
         if not skills:
             skills = [
@@ -46,12 +62,14 @@ class JobMatchingAgent:
                     skill_name="Python",
                     category="Language",
                     confidence_score=0.85,
+                    verification_status="repository_supported",
                 ),
                 StudentSkill(
                     firebase_uid=firebase_uid,
                     skill_name="FastAPI",
                     category="Framework",
                     confidence_score=0.80,
+                    verification_status="repository_supported",
                 ),
             ]
 
@@ -81,6 +99,16 @@ class JobMatchingAgent:
                     match_score=85.0,
                     matching_skills=["Python", "FastAPI"],
                     missing_skills=["Docker", "Redis"],
+                    demonstrated_skills=["FastAPI"],
+                    repo_supported_skills=["Python"],
+                    missing_skills_breakdown=[
+                        {"skill_name": "Docker", "gap_type": "absent_evidence", "reason": "Absent from portfolio"},
+                        {"skill_name": "Redis", "gap_type": "absent_evidence", "reason": "Absent from portfolio"},
+                    ],
+                    match_reasons=[
+                        "Skill match: 2/4 required skills (50%): Python, FastAPI (+37.5 pts).",
+                        "Practically verified skills demonstrated in code assessment: FastAPI.",
+                    ],
                     source_url="https://razorpay.com/jobs/",
                     source_name="Curated India",
                 ),
@@ -92,6 +120,15 @@ class JobMatchingAgent:
                     match_score=75.0,
                     matching_skills=["Python", "PostgreSQL"],
                     missing_skills=["Kafka", "Kubernetes"],
+                    demonstrated_skills=[],
+                    repo_supported_skills=["Python", "PostgreSQL"],
+                    missing_skills_breakdown=[
+                        {"skill_name": "Kafka", "gap_type": "absent_evidence", "reason": "Absent from portfolio"},
+                        {"skill_name": "Kubernetes", "gap_type": "absent_evidence", "reason": "Absent from portfolio"},
+                    ],
+                    match_reasons=[
+                        "Skill match: 2/4 required skills (50%): Python, PostgreSQL (+35.0 pts).",
+                    ],
                     source_url="https://careers.swiggy.com/",
                     source_name="Curated India",
                 ),
@@ -109,6 +146,10 @@ class JobMatchingAgent:
                 match_score=round(match_res.match_score, 1),
                 matching_skills=match_res.matched_skills,
                 missing_skills=match_res.missing_skills,
+                demonstrated_skills=match_res.demonstrated_skills,
+                repo_supported_skills=match_res.repo_supported_skills,
+                missing_skills_breakdown=match_res.missing_skills_breakdown,
+                match_reasons=match_reasons if (match_reasons := match_res.match_reasons) else [],
                 source_url=job.url or "https://razorpay.com",
                 source_name=job.source or "Curated India",
             )

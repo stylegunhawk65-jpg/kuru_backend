@@ -1,6 +1,7 @@
 """Pydantic validation schemas for Career Intelligence, Skill Gaps, and What-If Simulations."""
 
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -12,6 +13,8 @@ class MatchedSkillItem(BaseModel):
     confidence_score: float
     evidence_count: int = 0
     source_repositories: list[str] = []
+    verification_status: str | None = "repository_supported"  # practically_demonstrated, repository_supported, not_yet_verified
+    demonstrated_score: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -23,6 +26,8 @@ class MissingSkillItem(BaseModel):
     demand_count: int
     demand_pct: float
     importance: str  # Critical, Important, Beneficial
+    gap_type: str = "absent_evidence"  # demonstrated_need, absent_evidence, dependency_only
+    gap_reason: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,6 +41,7 @@ class PrioritizedGapItem(BaseModel):
     market_demand_pct: float
     graph_proximity: str
     reasons: list[str]
+    gap_type: str = "absent_evidence"  # demonstrated_need, absent_evidence, dependency_only
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,6 +72,12 @@ class SkillGapReportResponse(BaseModel):
     missing_skills: list[MissingSkillItem] = []
     prioritized_gaps: list[PrioritizedGapItem] = []
     recommendations: list[SkillRecommendationItem] = []
+    verified_readiness_score: float | None = None
+    readiness_breakdown: dict[str, Any] | None = None
+    honest_disclaimer: str = (
+        "Readiness is calculated strictly from objective code and assessment evidence. "
+        "Repository similarity percentages in SkillProof are NEVER equated with competency or treated as AI generation indicators."
+    )
     summary_notes: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -138,3 +150,7 @@ class WhatIfSimulationResponse(BaseModel):
     resolved_gaps: list[str]
     remaining_gaps: list[str]
     assumptions: str
+    disclaimer: str = (
+        "PROJECTION ONLY (NOT A HIRING GUARANTEE): Estimates reflect potential alignment gains "
+        "from demonstrated competency based on deterministic rules, not subjective hiring decisions or employment guarantees."
+    )

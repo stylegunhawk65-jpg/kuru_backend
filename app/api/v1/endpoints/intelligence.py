@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthenticatedUser, get_current_user
 from app.db.session import get_db
 from app.models.job import JobPosting
+from app.models.assessment import PracticalAssessment
 from app.models.profile import StudentProfile
 from app.models.skill import SkillGraphEdge, StudentSkill
+from app.models.skillproof import SkillProofEvidence
 from app.schemas.intelligence import (
     CareerPathCompareRequest,
     CareerPathCompareResponse,
@@ -167,6 +169,16 @@ async def simulate_what_if(
     jobs_stmt = select(JobPosting).where(JobPosting.is_active == True)
     jobs = (await db.execute(jobs_stmt)).scalars().all()
 
+    assessments_stmt = select(PracticalAssessment).where(
+        PracticalAssessment.firebase_uid == current_user.uid
+    )
+    assessments = (await db.execute(assessments_stmt)).scalars().all()
+
+    evidence_stmt = select(SkillProofEvidence).where(
+        SkillProofEvidence.firebase_uid == current_user.uid
+    )
+    evidence = (await db.execute(evidence_stmt)).scalars().all()
+
     return career_intelligence_service.simulate_what_if(
         profile=profile,
         skills=skills,
@@ -174,4 +186,6 @@ async def simulate_what_if(
         jobs=jobs,
         hypothetical_skills=payload.hypothetical_skills,
         target_role=payload.target_role,
+        assessments=assessments,
+        skillproof_evidence=evidence,
     )

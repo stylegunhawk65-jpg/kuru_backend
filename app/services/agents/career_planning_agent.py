@@ -47,11 +47,28 @@ class CareerPlanningAgent:
         ]
         focus_skills = [g.skill_name for g in prioritized_gaps[:4]] or ["Docker", "Redis"]
 
-        # 2. Invoke structured roadmap generation
+        # 2. Extract assessment insights from practical tests
+        from app.models.assessment import PracticalAssessment
+        pa_stmt = select(PracticalAssessment).where(
+            PracticalAssessment.firebase_uid == firebase_uid,
+        )
+        assessments_res = await db.execute(pa_stmt)
+        user_assessments = assessments_res.scalars().all()
+
+        assessment_insights: list[str] = []
+        for assm in user_assessments:
+            if not assm.passed:
+                assessment_insights.append(
+                    f"Candidate attempted practical challenge on '{assm.skill_name}' (score {assm.score or 0.0:.0f}%) "
+                    f"and needs focused debugging on edge cases."
+                )
+
+        # 3. Invoke structured roadmap generation
         req = RoadmapGenerateRequest(
             target_role=target_role,
             focus_skills=focus_skills,
             weekly_hours_available=weekly_hours_available,
+            assessment_insights=assessment_insights,
         )
         llm_roadmap = await career_task_service.generate_learning_roadmap(
             provider=provider,
@@ -59,8 +76,8 @@ class CareerPlanningAgent:
             request=req,
         )
 
-        # 3. Compute deterministic what-if readiness impact using existing intelligence service
-        what_if_readiness: dict[str, float] = {}
+        # 4. Compute deterministic what-if readiness impact using existing intelligence service
+        what_if_readiness: dict[str, Any] = {}
         try:
             from app.models.job import JobPosting
             from app.models.profile import StudentProfile
@@ -83,6 +100,7 @@ class CareerPlanningAgent:
                 "baseline_fit_score": float(sim_res.baseline_fit_score),
                 "simulated_fit_score": float(sim_res.simulated_fit_score),
                 "fit_score_delta": float(sim_res.score_delta),
+                "projection_notice": "PROJECTION ONLY (NOT A HIRING GUARANTEE): Reflects potential alignment gains.",
             }
         except Exception as exc:
             logger.warning("What-if simulation fallback during planning: %s", exc)
@@ -90,6 +108,7 @@ class CareerPlanningAgent:
                 "baseline_fit_score": 60.0,
                 "simulated_fit_score": 85.0,
                 "fit_score_delta": 25.0,
+                "projection_notice": "PROJECTION ONLY (NOT A HIRING GUARANTEE): Reflects potential alignment gains.",
             }
 
 

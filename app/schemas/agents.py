@@ -31,6 +31,8 @@ class VerifiedSkillItem(BaseModel):
     confidence_score: float = Field(..., ge=0.0, le=1.0)
     source_evidence_count: int = 0
     related_skills: list[str] = Field(default_factory=list)
+    verification_status: str = "repository_supported"  # practically_demonstrated, repository_supported, not_yet_verified
+    evidence_type: str = "repository"  # practical_demonstration, ast_implementation, manifest_dependency, none
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +40,7 @@ class VerifiedSkillItem(BaseModel):
 # ---------------------------------------------------------------------------
 
 class MatchedJobItem(BaseModel):
-    """Transparently ranked real job posting."""
+    """Transparently ranked real job posting with evidence-backed breakdown."""
 
     id: str
     title: str
@@ -47,6 +49,10 @@ class MatchedJobItem(BaseModel):
     match_score: float = Field(..., ge=0.0, le=100.0)
     matching_skills: list[str] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
+    demonstrated_skills: list[str] = Field(default_factory=list)
+    repo_supported_skills: list[str] = Field(default_factory=list)
+    missing_skills_breakdown: list[dict[str, Any]] = Field(default_factory=list)
+    match_reasons: list[str] = Field(default_factory=list)
     source_url: str
     source_name: str
 
@@ -60,6 +66,7 @@ class PrioritizedSkillGapItem(BaseModel):
     market_demand_pct: float
     graph_proximity: str
     reasons: list[str] = Field(default_factory=list)
+    gap_type: str = "absent_evidence"  # demonstrated_need, absent_evidence, dependency_only
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +91,7 @@ class CareerPlanResult(BaseModel):
     weekly_hours: int
     weekly_modules: list[LearningModuleItem] = Field(default_factory=list)
     learning_principles: list[str] = Field(default_factory=list)
-    what_if_readiness: dict[str, float] = Field(default_factory=dict)
+    what_if_readiness: dict[str, Any] = Field(default_factory=dict)
 
 
 class GenuineResourceItem(BaseModel):
@@ -98,6 +105,8 @@ class GenuineResourceItem(BaseModel):
     difficulty: str
     estimated_hours: int
     description: str
+    is_verified: bool = True
+    verification_source: str = "official_documentation_whitelist"
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +124,14 @@ class ProjectRecommendationItem(BaseModel):
     portfolio_deliverable: str = Field(..., description="Final GitHub repository deliverable and live demo")
     estimated_duration_weeks: int = Field(default=2, ge=1, le=8)
     difficulty_level: str = Field(default="Intermediate", description="Beginner, Intermediate, Advanced")
+    validated_job_technologies: list[str] = Field(
+        default_factory=list,
+        description="Technologies in this project matching selected job requirements",
+    )
+    job_alignment_summary: str | None = Field(
+        default=None,
+        description="Explanation of how this project validates candidate for selected job",
+    )
 
 
 class ProjectRecommendationsResponse(BaseModel):

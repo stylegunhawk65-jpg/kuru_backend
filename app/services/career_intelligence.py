@@ -90,10 +90,32 @@ class CareerIntelligenceService:
         edges: list[SkillGraphEdge],
         jobs: list[JobPosting],
         target_role: str = "overall",
+        assessments: list[Any] | None = None,
+        skillproof_evidence: list[Any] | None = None,
     ) -> dict[str, Any]:
         """Compute comprehensive, explainable skill gaps, fit score, and recommendations."""
         selected_jobs = self._filter_jobs_for_role(jobs, target_role, profile)
         assessed_jobs_count = len(selected_jobs)
+
+        # Build lookups for practical assessments
+        assessment_map: dict[str, Any] = {}
+        if assessments:
+            for a in assessments:
+                norm_a = normalize_skill(getattr(a, "skill_name", ""))
+                if norm_a:
+                    assessment_map[norm_a] = a
+
+        # Build lookups for dependency-only evidence from SkillProof
+        dependency_only_skills: set[str] = set()
+        if skillproof_evidence:
+            for ev in skillproof_evidence:
+                detected = getattr(ev, "skills_detected", []) or []
+                for item in detected:
+                    s_name = item.get("skill") if isinstance(item, dict) else None
+                    if s_name:
+                        norm_s = normalize_skill(s_name)
+                        if item.get("has_dependency") and not item.get("has_implementation"):
+                            dependency_only_skills.add(norm_s)
 
         # 1. Evaluate job match scores
         job_match_results = []
@@ -118,15 +140,26 @@ class CareerIntelligenceService:
 
         matched_skills_dict: dict[str, MatchedSkillItem] = {}
         for s in skills:
+            norm_s = normalize_skill(s.skill_name)
+            v_status = getattr(s, "verification_status", None) or "repository_supported"
+            demo_score = None
+            if norm_s in assessment_map:
+                assm = assessment_map[norm_s]
+                if getattr(assm, "passed", False):
+                    v_status = "practically_demonstrated"
+                    demo_score = getattr(assm, "score", None)
+
             matched_skills_dict[s.skill_name] = MatchedSkillItem(
                 skill_name=s.skill_name,
                 category=s.category,
                 confidence_score=round(s.confidence_score, 2),
                 evidence_count=len(s.evidence or []),
                 source_repositories=s.source_repositories or [],
+                verification_status=v_status,
+                demonstrated_score=demo_score,
             )
 
-        # 3. Aggregate Missing Skills across selected jobs
+        # 3. Aggregate Missing Skills across selected jobs, distinguishing gap types
         missing_skills_counter: dict[str, int] = {}
         for _, res in job_match_results:
             for missing in res.missing_skills:
@@ -148,12 +181,34 @@ class CareerIntelligenceService:
             elif demand_pct >= 25.0:
                 importance = "Important"
 
+            norm_name = normalize_skill(skill_name)
+            # Classify gap type: demonstrated_need vs dependency_only vs absent_evidence
+            if norm_name in assessment_map:
+                assm = assessment_map[norm_name]
+                if not getattr(assm, "passed", False) or getattr(assm, "status", "") == "failed":
+                    gap_type = "demonstrated_need"
+                    gap_reason = (
+                        f"Candidate attempted practical sandbox assessment (score: {getattr(assm, 'score', 0.0) or 0.0:.1f}%) "
+                        f"and did not pass required test cases. Targeted practice required."
+                    )
+                else:
+                    gap_type = "absent_evidence"
+                    gap_reason = "No confirmed code evidence or assessment pass found in portfolio."
+            elif norm_name in dependency_only_skills:
+                gap_type = "dependency_only"
+                gap_reason = "Observed in repository dependency manifests, but absent from source code implementations."
+            else:
+                gap_type = "absent_evidence"
+                gap_reason = "No repository code or practical assessment records found in portfolio; unverified skill."
+
             missing_skill_items.append(
                 MissingSkillItem(
                     skill_name=skill_name,
                     demand_count=count,
                     demand_pct=demand_pct,
                     importance=importance,
+                    gap_type=gap_type,
+                    gap_reason=gap_reason,
                 )
             )
 
@@ -184,7 +239,7 @@ class CareerIntelligenceService:
         user_interests = [i.lower() for i in (profile.interests if profile else [])]
 
         prioritized_gaps: list[PrioritizedGapItem] = []
-        gap_scores: list[tuple[float, str, float, str, list[str]]] = []
+        gap_scores: list[tuple[float, str, float, str, list[str], str]] = []
 
         for item in missing_skill_items:
             norm_name = normalize_skill(item.skill_name)
@@ -197,7 +252,16 @@ class CareerIntelligenceService:
                 f"({item.demand_pct}%) of analyzed jobs."
             )
 
-            # B. Graph Proximity Score (20-100)
+            # B. Gap Type Context
+            if item.gap_type == "demonstrated_need":
+                demand_score = min(100.0, demand_score + 15.0)  # High urgency due to direct assessment attempt
+                reasons.append(item.gap_reason or "Active deficiency demonstrated in assessment.")
+            elif item.gap_type == "dependency_only":
+                reasons.append(item.gap_reason or "Found in dependencies but not yet implemented.")
+            else:
+                reasons.append(item.gap_reason or "Absent from portfolio evidence.")
+
+            # C. Graph Proximity Score (20-100)
             graph_score = 20.0
             graph_proximity = "Independent"
             if norm_name in graph_synergy_map:
@@ -216,7 +280,7 @@ class CareerIntelligenceService:
                     graph_proximity = f"Same Category ({known_cat})"
                     reasons.append(f"Shares ecosystem category ({known_cat}) with your verified skills.")
 
-            # C. Interest Score (0 or 100)
+            # D. Interest Score (0 or 100)
             interest_score = 0.0
             matched_interest = next((i for i in user_interests if i in item.skill_name.lower() or item.skill_name.lower() in i), None)
             if matched_interest:
@@ -228,12 +292,12 @@ class CareerIntelligenceService:
                 (demand_score * 0.50) + (graph_score * 0.30) + (interest_score * 0.20),
                 1,
             )
-            gap_scores.append((priority_score, item.skill_name, item.demand_pct, graph_proximity, reasons))
+            gap_scores.append((priority_score, item.skill_name, item.demand_pct, graph_proximity, reasons, item.gap_type))
 
         # Sort by priority score descending
         gap_scores.sort(key=lambda x: x[0], reverse=True)
 
-        for rank, (score, s_name, d_pct, prox, r_list) in enumerate(gap_scores, start=1):
+        for rank, (score, s_name, d_pct, prox, r_list, g_type) in enumerate(gap_scores, start=1):
             prioritized_gaps.append(
                 PrioritizedGapItem(
                     skill_name=s_name,
@@ -242,6 +306,7 @@ class CareerIntelligenceService:
                     market_demand_pct=d_pct,
                     graph_proximity=prox,
                     reasons=r_list,
+                    gap_type=g_type,
                 )
             )
 
@@ -280,10 +345,47 @@ class CareerIntelligenceService:
                 )
             )
 
+        # 6. Compute Verified Readiness Score & Breakdown
+        demonstrated_list = [
+            m.skill_name for m in matched_skills_dict.values() if m.verification_status == "practically_demonstrated"
+        ]
+        repo_supported_list = [
+            m.skill_name for m in matched_skills_dict.values() if m.verification_status == "repository_supported"
+        ]
+        absent_list = [m.skill_name for m in missing_skill_items]
+
+        total_tracked = len(demonstrated_list) + len(repo_supported_list) + len(absent_list)
+        if total_tracked > 0:
+            verified_readiness = round(
+                ((len(demonstrated_list) * 1.0 + len(repo_supported_list) * 0.70) / total_tracked) * 100,
+                1,
+            )
+        else:
+            verified_readiness = overall_fit_score
+
+        readiness_breakdown = {
+            "demonstrated_skills": demonstrated_list,
+            "repo_supported_skills": repo_supported_list,
+            "absent_evidence_skills": absent_list,
+            "demonstrated_count": len(demonstrated_list),
+            "repo_supported_count": len(repo_supported_list),
+            "absent_evidence_count": len(absent_list),
+            "similarity_neutrality_guarantee": (
+                "Readiness is calculated strictly from objective code and assessment evidence. "
+                "Repository similarity percentages in SkillProof are NEVER equated with competency or treated as AI generation indicators."
+            ),
+        }
+
+        honest_disclaimer = (
+            "Readiness is calculated strictly from objective code and assessment evidence. "
+            "Repository similarity percentages in SkillProof are NEVER equated with competency or treated as AI generation indicators."
+        )
+
         summary_notes = (
             f"Assessed {assessed_jobs_count} job postings for role '{target_role}'. "
-            f"Portfolio readiness is {overall_fit_score}% ({readiness_level}). "
-            f"Identified {len(matched_skills_dict)} evidence-backed skills and {len(prioritized_gaps)} prioritized gaps."
+            f"Portfolio readiness is {overall_fit_score}% ({readiness_level}), with verified readiness score of {verified_readiness}%. "
+            f"Identified {len(matched_skills_dict)} evidence-backed skills ({len(demonstrated_list)} practically demonstrated) "
+            f"and {len(prioritized_gaps)} prioritized gaps."
         )
 
         return {
@@ -295,6 +397,9 @@ class CareerIntelligenceService:
             "missing_skills": missing_skill_items,
             "prioritized_gaps": prioritized_gaps,
             "recommendations": recommendations,
+            "verified_readiness_score": verified_readiness,
+            "readiness_breakdown": readiness_breakdown,
+            "honest_disclaimer": honest_disclaimer,
             "summary_notes": summary_notes,
         }
 
@@ -386,10 +491,15 @@ class CareerIntelligenceService:
         jobs: list[JobPosting],
         hypothetical_skills: list[str],
         target_role: str = "overall",
+        assessments: list[Any] | None = None,
+        skillproof_evidence: list[Any] | None = None,
     ) -> WhatIfSimulationResponse:
         """Simulate portfolio impact of acquiring hypothetical skills."""
         # 1. Baseline assessment
-        baseline_analysis = self.analyze_skill_gaps(profile, skills, edges, jobs, target_role)
+        baseline_analysis = self.analyze_skill_gaps(
+            profile, skills, edges, jobs, target_role,
+            assessments=assessments, skillproof_evidence=skillproof_evidence,
+        )
         baseline_score = baseline_analysis["overall_fit_score"]
         baseline_readiness = baseline_analysis["readiness_level"]
 
@@ -417,7 +527,8 @@ class CareerIntelligenceService:
 
         # 3. Simulated assessment
         simulated_analysis = self.analyze_skill_gaps(
-            profile, simulated_skills_list, edges, jobs, target_role
+            profile, simulated_skills_list, edges, jobs, target_role,
+            assessments=assessments, skillproof_evidence=skillproof_evidence,
         )
         simulated_score = simulated_analysis["overall_fit_score"]
         simulated_readiness = simulated_analysis["readiness_level"]
@@ -446,6 +557,10 @@ class CareerIntelligenceService:
             "Simulation assumes acquisition of hypothetical skills with 0.85 proficiency confidence. "
             "Actual career fit gains depend on practical code evidence and portfolio validation."
         )
+        disclaimer = (
+            "PROJECTION ONLY (NOT A HIRING GUARANTEE): Estimates reflect potential alignment gains "
+            "from demonstrated competency based on deterministic rules, not subjective hiring decisions or employment guarantees."
+        )
 
         return WhatIfSimulationResponse(
             target_role=target_role,
@@ -459,6 +574,48 @@ class CareerIntelligenceService:
             resolved_gaps=resolved_gaps,
             remaining_gaps=remaining_gaps,
             assumptions=assumptions,
+            disclaimer=disclaimer,
+        )
+
+    @staticmethod
+    def _enrich_record_attributes(record: CareerAssessment) -> None:
+        """Attach runtime properties expected by SkillGapReportResponse."""
+        matched = record.matched_skills or []
+        missing = record.missing_skills or []
+        demonstrated = [m.get("skill_name") for m in matched if m.get("verification_status") == "practically_demonstrated"]
+        repo_supported = [m.get("skill_name") for m in matched if m.get("verification_status") != "practically_demonstrated"]
+        absent = [m.get("skill_name") for m in missing]
+
+        total = len(demonstrated) + len(repo_supported) + len(absent)
+        if total > 0:
+            verified_score = round(((len(demonstrated) * 1.0 + len(repo_supported) * 0.70) / total) * 100, 1)
+        else:
+            verified_score = record.overall_fit_score
+
+        setattr(record, "verified_readiness_score", verified_score)
+        setattr(
+            record,
+            "readiness_breakdown",
+            {
+                "demonstrated_skills": demonstrated,
+                "repo_supported_skills": repo_supported,
+                "absent_evidence_skills": absent,
+                "demonstrated_count": len(demonstrated),
+                "repo_supported_count": len(repo_supported),
+                "absent_evidence_count": len(absent),
+                "similarity_neutrality_guarantee": (
+                    "Readiness is calculated strictly from objective code and assessment evidence. "
+                    "Repository similarity percentages in SkillProof are NEVER equated with competency or treated as AI generation indicators."
+                ),
+            },
+        )
+        setattr(
+            record,
+            "honest_disclaimer",
+            (
+                "Readiness is calculated strictly from objective code and assessment evidence. "
+                "Repository similarity percentages in SkillProof are NEVER equated with competency or treated as AI generation indicators."
+            ),
         )
 
     async def get_or_create_assessment(
@@ -477,6 +634,7 @@ class CareerIntelligenceService:
             res = await db.execute(stmt)
             existing = res.scalar_one_or_none()
             if existing:
+                self._enrich_record_attributes(existing)
                 return existing
 
         # Fetch dependencies from DB
@@ -496,8 +654,26 @@ class CareerIntelligenceService:
         jobs_stmt = select(JobPosting).where(JobPosting.is_active == True)
         jobs = (await db.execute(jobs_stmt)).scalars().all()
 
+        # 5. Practical Assessments (Phase 9)
+        from app.models.assessment import PracticalAssessment
+        pa_stmt = select(PracticalAssessment).where(PracticalAssessment.firebase_uid == firebase_uid)
+        assessments = (await db.execute(pa_stmt)).scalars().all()
+
+        # 6. SkillProof Evidence (Phase 8)
+        from app.models.skillproof import SkillProofEvidence
+        spe_stmt = select(SkillProofEvidence).where(SkillProofEvidence.firebase_uid == firebase_uid)
+        skillproof_evidence = (await db.execute(spe_stmt)).scalars().all()
+
         # Compute analysis
-        analysis = self.analyze_skill_gaps(profile, skills, edges, jobs, target_role)
+        analysis = self.analyze_skill_gaps(
+            profile=profile,
+            skills=skills,
+            edges=edges,
+            jobs=jobs,
+            target_role=target_role,
+            assessments=list(assessments),
+            skillproof_evidence=list(skillproof_evidence),
+        )
 
         # Check if record already exists to update
         stmt = select(CareerAssessment).where(
@@ -540,6 +716,7 @@ class CareerIntelligenceService:
 
         await db.commit()
         await db.refresh(record)
+        self._enrich_record_attributes(record)
         return record
 
 

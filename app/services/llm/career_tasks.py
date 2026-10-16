@@ -78,10 +78,17 @@ class CareerTaskService:
             "Avoid passive learning recommendations."
         )
 
+        assessment_ctx = (
+            f"Practical Assessment Focus/Weaknesses: {'; '.join(request.assessment_insights)}\n"
+            if request.assessment_insights
+            else ""
+        )
+
         user_prompt = (
             f"Target Role: {request.target_role}\n"
             f"Priority Skills to Master: {skills_str}\n"
-            f"Weekly Dedicated Hours: {request.weekly_hours_available} hours/week\n\n"
+            f"Weekly Dedicated Hours: {request.weekly_hours_available} hours/week\n"
+            f"{assessment_ctx}\n"
             f"Generate a progressive weekly roadmap with concrete daily milestones and a portfolio deliverable."
         )
 
@@ -130,13 +137,17 @@ class CareerTaskService:
         skill_gaps: list[str],
         verified_skills: list[str],
         matched_job_titles: list[str] | None = None,
+        selected_job_required_skills: list[str] | None = None,
     ) -> Any:
-        """Synthesize concrete portfolio projects directly targeting candidate skill gaps."""
+        """Synthesize concrete portfolio projects directly targeting candidate skill gaps and validate against job technologies."""
         from app.schemas.agents import ProjectRecommendationsResponse
+        from app.services.matcher import normalize_skill
 
         gaps_str = ", ".join(skill_gaps[:5]) or "Docker, Redis, System Design"
         existing_str = ", ".join(verified_skills[:5]) or "Python, SQL"
         jobs_context = f" Target Job Alignments: {', '.join(matched_job_titles[:3])}." if matched_job_titles else ""
+        if selected_job_required_skills:
+            jobs_context += f" Selected Job Required Skills: {', '.join(selected_job_required_skills)}."
 
         system_prompt = (
             "You are a technical hiring manager and staff software architect. "
@@ -151,13 +162,33 @@ class CareerTaskService:
             f"Recommend concrete engineering projects that directly close these gaps and prove readiness."
         )
 
-        return await provider.generate_structured(
+        res: ProjectRecommendationsResponse = await provider.generate_structured(
             prompt=user_prompt,
             schema=ProjectRecommendationsResponse,
             system_prompt=system_prompt,
             max_tokens=650,
             temperature=0.3,
         )
+
+        # Validate each project's tech_stack against target job requirements and skill gaps
+        target_skills_set = {normalize_skill(s) for s in (selected_job_required_skills or skill_gaps)}
+        for proj in res.recommended_projects:
+            validated = [
+                tech for tech in proj.tech_stack
+                if normalize_skill(tech) in target_skills_set or any(normalize_skill(tech) in s for s in target_skills_set)
+            ]
+            proj.validated_job_technologies = validated
+            if validated:
+                proj.job_alignment_summary = (
+                    f"Directly exercises {len(validated)} required technologies ({', '.join(validated)}) "
+                    f"critical for the target job role."
+                )
+            else:
+                proj.job_alignment_summary = (
+                    f"Builds core architecture foundations supporting {', '.join(proj.target_skill_gaps)}."
+                )
+
+        return res
 
 
 career_task_service = CareerTaskService()

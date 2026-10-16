@@ -789,6 +789,66 @@ The **SkillProof Practical Assessment Engine** provides hands-on coding challeng
 
 ---
 
+### Phase 10: Career Intelligence Integration — 9-Agent Career Twin Orchestration
+
+Phase 10 connects Phase 8 (SkillProof Engine) repository evidence and Phase 9 (Practical Assessment Engine) sandbox testing results into Kuru's core Career Intelligence service and the 9 LangGraph Career Twin agents.
+
+#### 1. Evidence-Backed Job Matching
+- **Verification Levels**: Evaluates job required skills against candidate skills with explicit verification statuses:
+  - `practically_demonstrated`: Backed by passing practical sandbox assessments ($\ge 70\%$ test score).
+  - `repository_supported`: Extracted directly from validated repository AST imports or definitions.
+  - `unverified`: Listed in profile interests but lacking code or assessment proof.
+- **Explainable Match Reasons**: Generates granular, evidence-based arithmetic reasons distinguishing verified code implementations from stated interests.
+- **Missing Skills Breakdown**: Identifies missing job skills, distinguishing lack of evidence from active test failures.
+
+#### 2. Differentiated Skill Gap Analysis & Gap Types
+- **Gap Type Classification**:
+  - `demonstrated_need`: Assigned when a student attempted a practical assessment on a skill and failed or scored below the required threshold. Given highest priority rank and elevated urgency score (+15.0 pts).
+  - `dependency_only`: Assigned when a skill is present in dependency manifests (`requirements.txt`, `package.json`, etc.) without source implementation evidence in Phase 8 SkillProof.
+  - `absent_evidence`: Assigned when no portfolio records or assessment attempts exist for the job-required skill.
+- **Priority Ranking Formula**: Composite ranking based on market demand ($50\%$), knowledge graph proximity ($30\%$), and stated candidate interests ($20\%$).
+
+#### 3. Deterministic Readiness Scoring & Similarity Neutrality
+- **Verified Readiness Score**:
+  $$\text{Verified Readiness Score} = \frac{|\text{Demonstrated}| \times 1.0 + |\text{Repo-Supported}| \times 0.70}{|\text{Demonstrated}| + |\text{Repo-Supported}| + |\text{Absent}|} \times 100$$
+- **Readiness Breakdown**: Detailed breakdown of counts and skill names across demonstrated, repo-supported, and absent categories.
+- **Strict Similarity Neutrality Guarantee**:
+  - SkillProof repository similarity percentages are **never** equated with student competency, nor treated as AI generation indicators.
+  - Readiness calculations rely solely on objective code AST evidence and isolated practical sandbox verification results.
+
+#### 4. Career Planning with Practical Assessment Insights
+- **Weakness-Targeted Roadmaps**: `career_planning_agent` queries candidate practical assessment records, extracts failed challenge areas or edge-case deficiencies into `assessment_insights`, and incorporates them into personalized learning milestones.
+- **Adaptive Runway**: Schedules learning modules based on `weekly_hours_available`.
+- **What-If Readiness Simulation**: Simulates the projected readiness gains from acquiring prioritized skills, accompanied by an explicit non-guarantee disclaimer.
+
+#### 5. Authentic Learning Resources & Domain Whitelist
+- **Zero Hallucinated Links**: `resource_research_agent` queries curated registries and validates each URL against the official domain whitelist (`ALLOWED_OFFICIAL_DOMAINS`).
+- **Enforced Verification**: Resources carry `is_verified=True` and `verification_source="official_documentation_whitelist"`.
+
+#### 6. Job-Aligned Project Recommendations
+- **Targeted Engineering Projects**: `project_recommendation_agent` recommends portfolio-grade projects specifically formulated to close identified skill gaps.
+- **Job Technology Alignment**: Cross-checks each project's `tech_stack` against selected job required technologies, generating `validated_job_technologies` and an explainable `job_alignment_summary`.
+
+#### 7. What-If Simulation & Non-Guarantee Disclaimers
+- **Hypothetical Skill Analysis**: Endpoint `POST /api/v1/intelligence/what-if` calculates fit score deltas, newly unlocked jobs, and resolved vs remaining gaps.
+- **Mandatory Hiring Disclaimer**: All simulation outputs prominently disclose:
+  > *PROJECTION ONLY (NOT A HIRING GUARANTEE): Estimates reflect potential alignment gains from demonstrated competency based on deterministic rules, not subjective hiring decisions or employment guarantees.*
+
+#### 8. Full 9-Agent Career Twin Orchestration Matrix
+| Node | Agent | Phase 10 Intelligence Enhancement |
+| :--- | :--- | :--- |
+| 1 | **Career Profile Agent** | Consolidates verified student profile and career interest goals. |
+| 2 | **GitHub Analysis Agent** | Maps verified skills with `verification_status` and AST evidence. |
+| 3 | **Job Matching Agent** | Matches real jobs, highlighting `demonstrated_skills` and `repo_supported_skills`. |
+| 4 | **Skill Gap Agent** | Classifies gaps into `demonstrated_need`, `dependency_only`, and `absent_evidence`. |
+| 5 | **Career Planning Agent** | Integrates assessment weak points into weekly milestones and what-if readiness. |
+| 6 | **Resource Research Agent** | Enforces zero hallucinated URLs via strict domain whitelist verification. |
+| 7 | **Project Recommendation Agent** | Validates project `tech_stack` against selected job required technologies. |
+| 8 | **Resume Agent** | Tailors bullet points incorporating verified skills and job requirements. |
+| 9 | **Approval Workflow Agent** | Enforces human-in-the-loop authorization gates on consequential career actions. |
+
+---
+
 ## 🔒 Security & Operational Principles
 
 1. **Zero Untrusted Code Execution in Main Process**: All repository analysis uses static AST parsing and manifest inspection. Untrusted code is never run in `eval`, `exec`, or shell processes within the backend application.
@@ -806,5 +866,6 @@ The **SkillProof Practical Assessment Engine** provides hands-on coding challeng
 13. **Observability Integrity**: LangSmith tracing strictly preserves privacy, masks secrets, and never fakes successful traces when credentials are missing.
 14. **Honest SkillProof & Similarity Integrity**: Similarity scores indicate syntactic, structural, or lexical overlap with canonical patterns. High similarity to reference boilerplate is normal and expected; similarity alone must never be used to judge student competency, claim plagiarism, or assert AI generation. Missing reference coverage is explicitly reported.
 15. **Sandbox Isolation & Fair Practical Assessment**: Untrusted code is strictly executed inside isolated subprocesses with pre-execution AST security filters, scrubbed environments, and hard timeouts. Hidden tests are structurally shielded from public view. Objective test scores govern pass/fail determinations ($\ge 70\%$). High template similarity triggers constructive debugging challenges rather than punitive accusations.
+16. **Fairness & Honest Projections in Career Intelligence**: SkillProof repository similarity percentages are strictly decoupled from competency evaluations. What-if career simulations explicitly state assumptions and prominently include disclaimers that projections are mathematical estimates and not hiring guarantees.
 
 

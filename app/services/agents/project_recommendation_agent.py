@@ -21,6 +21,7 @@ class ProjectRecommendationAgent:
         skill_gaps: list[str],
         verified_skills: list[str],
         matched_job_titles: list[str] | None = None,
+        selected_job_required_skills: list[str] | None = None,
     ) -> list[ProjectRecommendationItem]:
         """Synthesize actionable engineering project recommendations closing verified skill gaps."""
         logger.info(
@@ -35,6 +36,7 @@ class ProjectRecommendationAgent:
             skill_gaps=skill_gaps,
             verified_skills=verified_skills,
             matched_job_titles=matched_job_titles,
+            selected_job_required_skills=selected_job_required_skills,
         )
 
         return res.recommended_projects

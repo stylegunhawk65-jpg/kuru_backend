@@ -46,6 +46,7 @@ class RoadmapGenerateRequest(BaseModel):
     target_role: str = Field(..., min_length=2, max_length=100)
     focus_skills: list[str] = Field(default_factory=list, max_length=10, description="Specific skills to prioritize (defaults to top gaps)")
     weekly_hours_available: int = Field(default=12, ge=4, le=40, description="Weekly hours dedicated to study")
+    assessment_insights: list[str] = Field(default_factory=list, description="Targeted insights and weak areas from practical assessments")
 
 
 class RoadmapGenerateResponse(BaseModel):

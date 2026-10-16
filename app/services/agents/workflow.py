@@ -184,6 +184,19 @@ class CareerTwinWorkflowService:
         verified_names = [s["skill_name"] for s in raw_skills[:4]] or ["Python", "FastAPI"]
         matched_jobs = [j["title"] for j in state.get("matched_jobs", [])[:3]]
 
+        target_job_id = state.get("target_job_id")
+        selected_job = None
+        for j in state.get("matched_jobs", []):
+            if target_job_id and j.get("id") == target_job_id:
+                selected_job = j
+                break
+        if not selected_job and state.get("matched_jobs"):
+            selected_job = state["matched_jobs"][0]
+
+        job_req_skills = []
+        if selected_job:
+            job_req_skills = list(dict.fromkeys(selected_job.get("matched_skills", []) + selected_job.get("missing_skills", [])))
+
         try:
             projects = await project_recommendation_agent.run(
                 provider=provider,
@@ -191,6 +204,7 @@ class CareerTwinWorkflowService:
                 skill_gaps=gap_names,
                 verified_skills=verified_names,
                 matched_job_titles=matched_jobs,
+                selected_job_required_skills=job_req_skills or None,
             )
             return {
                 "projects": [p.model_dump() for p in projects],
