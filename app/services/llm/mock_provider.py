@@ -172,6 +172,38 @@ class MockLLMProvider(BaseLLMProvider):
             }
             return schema.model_validate(mock_data)
 
+        elif schema_name == "ProjectRecommendationsResponse":
+            mock_data = {
+                "target_role": "Backend Engineer",
+                "summary": (
+                    "Targeted portfolio projects designed to master missing skills (Redis, Docker) "
+                    "while demonstrating production engineering readiness to hiring managers."
+                ),
+                "recommended_projects": [
+                    {
+                        "title": "High-Throughput Distributed API Rate-Limiter & Caching Gateway",
+                        "description": "Architect an asynchronous reverse proxy with token-bucket rate limiting and cache-aside layers using FastAPI and Redis.",
+                        "target_skill_gaps": ["Redis", "Distributed Systems"],
+                        "tech_stack": ["Python", "FastAPI", "Redis", "Docker"],
+                        "architecture_overview": "FastAPI reverse proxy -> Redis cluster for sliding-window token bucket -> PostgreSQL persistent layer.",
+                        "portfolio_deliverable": "GitHub repo with Docker Compose orchestration, Locust load benchmark report, and architecture RFC.",
+                        "estimated_duration_weeks": 2,
+                        "difficulty_level": "Intermediate",
+                    },
+                    {
+                        "title": "Containerized Event-Driven Microservices Worker System",
+                        "description": "Build an asynchronous job processing system with retry queues, dead-letter exchanges, and transactional outbox patterns.",
+                        "target_skill_gaps": ["Docker", "Event-Driven Architecture", "Microservices"],
+                        "tech_stack": ["Python", "FastAPI", "PostgreSQL", "Docker Compose"],
+                        "architecture_overview": "REST API producer -> Transactional outbox -> Background consumer workers -> Idempotent updates.",
+                        "portfolio_deliverable": "Production repository with multi-stage Dockerfiles, GitHub Actions CI pipeline, and integration tests.",
+                        "estimated_duration_weeks": 3,
+                        "difficulty_level": "Advanced",
+                    },
+                ],
+            }
+            return schema.model_validate(mock_data)
+
         # Fallback to generating a minimal valid instance of any generic schema
         try:
             return schema.model_validate({})

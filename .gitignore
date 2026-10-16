@@ -81,7 +81,9 @@ cover/
 Thumbs.db
 
 # Machine Learning Model Weights, Checkpoints & Datasets (Phase 6)
-models/
+/models/
+!app/models/
+
 checkpoints/
 *.safetensors
 *.bin

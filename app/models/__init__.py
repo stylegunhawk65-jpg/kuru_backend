@@ -1,5 +1,4 @@
-"""Database models package."""
-
+from app.models.agent_workflow import AgentApprovalRequest, AgentWorkflowRun
 from app.models.github import GithubConnection, GithubRepository, RepositoryAnalysis
 from app.models.intelligence import CareerAssessment
 from app.models.job import JobPosting, JobSource, SavedJob
@@ -17,4 +16,6 @@ __all__ = [
     "JobSource",
     "SavedJob",
     "CareerAssessment",
+    "AgentApprovalRequest",
+    "AgentWorkflowRun",
 ]

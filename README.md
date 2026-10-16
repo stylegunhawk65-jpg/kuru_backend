@@ -128,6 +128,58 @@ The platform provides student career profiling, live verified job and internship
   - Memory analysis on RTX 4050 6GB: 4-bit base (~2.0 GB) + LoRA adapters (~95 MB) + Paged 8-bit AdamW (~100 MB) + gradient checkpointing activations (~1.4 GB) = **~4.2 GB VRAM peak**. Verified feasible on 6GB hardware.
   - **Strict Privacy Safeguard**: Prohibits training on raw user/student portfolio tables without explicit opt-in consent.
 
+### Phase 7: Multi-Agent System (LangChain, LangGraph & Human-in-the-Loop)
+- **Multi-Agent Architecture & Shared Local LLM**:
+  - Leverages **LangGraph** for typed cyclic state graph execution (`CareerTwinAgentState`), checkpointing (`MemorySaver`), and human approval gates.
+  - Leverages **LangChain** for `@tool` bindings, structured schema outputs, and resource queries.
+  - Strictly reuses the existing `Qwen2.5-3B-Instruct` local provider (`LocalTransformersProvider` on GPU, `MockLLMProvider` in test/CI mode). **Never creates separate LLMs per agent**.
+  - Strict separation of concerns: Deterministic business logic (job matching, skill gap formulas, profile loading, graph querying) stays outside the LLM in pure Python/SQLAlchemy services.
+- **The 9 Logical Agents**:
+  1. **Career Profile Agent (`profile_agent.py`)**: Consolidates student profile, target roles, preferred locations, and career interests.
+  2. **GitHub Analysis Agent (`github_agent.py`)**: Retrieves evidence-backed skills, confidence scores, and 1-hop knowledge graph relationships from Phase 3 static analysis.
+  3. **Job Matching Agent (`job_matching_agent.py`)**: Transparently ranks real job postings using Phase 4 deterministic scoring (`calculate_job_match`).
+  4. **Skill Gap Agent (`skill_gap_agent.py`)**: Calculates prioritized skill gaps against market demand and 1-hop graph proximity via `CareerIntelligenceService`.
+  5. **Career Planning Agent (`career_planning_agent.py`)**: Synthesizes progressive multi-week roadmaps and quantifies what-if readiness estimates.
+  6. **Resource Research Agent (`resource_research_agent.py`)**: Curates authentic learning resources. Strictly enforces zero invented URLs by validating against official documentation registries.
+  7. **Project Recommendation Agent (`project_recommendation_agent.py`)**: Formulates portfolio-grade project specifications directly addressing critical skill gaps for target jobs.
+  8. **Resume Agent (`resume_agent.py`)**: Generates tailored summaries and action-oriented bullet points incorporating verified skills.
+  9. **Approval Workflow Agent (`approval_agent.py`)**: Enforces mandatory human-in-the-loop approval gates for all consequential actions (e.g. submitting applications, exporting resumes). **An LLM cannot approve itself**.
+- **Authentic Learning Resource Registry (`resource_registry.py`)**:
+  - Authoritative directory of verified official resources (`docs.python.org`, `fastapi.tiangolo.com`, `docs.docker.com`, `postgresql.org`, `redis.io`, `react.dev`, `freecodecamp.org`, etc.).
+  - `is_url_genuine()` validator enforcing HTTPS and whitelisted domain matching.
+- **Human-in-the-Loop Approval Workflow & Audit Persistence**:
+  - `AgentApprovalRequest` table (`005_create_agent_workflow_and_approval_tables.py`) persists queued consequential actions in `pending` status.
+  - Execution strictly halts until explicit human authorization (`POST /api/v1/agents/approvals/{id}/approve` or `POST /api/v1/agents/approvals/{id}/reject`).
+  - Strict per-user isolation: Cross-user access or unauthorized decision attempts return `404 Not Found`.
+  - Workflow audit runs are tracked in `AgentWorkflowRun` with serialized step history, state summaries, and execution statuses.
+- **Multi-Agent Pipeline Workflow**:
+  ```mermaid
+  flowchart TD
+      START([Start / User Trigger]) --> Profile["1. Career Profile Agent"]
+      Profile --> GitHub["2. GitHub Analysis Agent"]
+      GitHub --> Jobs["3. Job Matching Agent"]
+      Jobs --> Gaps["4. Skill Gap Agent"]
+      Gaps --> Plan["5. Career Planning Agent"]
+      Plan --> Resources["6. Resource Research Agent"]
+      Resources --> Projects["7. Project Recommendation Agent"]
+      Projects --> Resume["8. Resume Agent"]
+      Resume --> Gate{"Consequential Action Requested?"}
+      Gate -- No --> END([End / Completed State])
+      Gate -- Yes --> Queue["9. Approval Workflow Agent (Queue Pending)"]
+      Queue --> Human["Human Student Decision Gate"]
+      Human -- "POST /approvals/{id}/approve" --> Exec["Execute Consequential Action"] --> END
+      Human -- "POST /approvals/{id}/reject" --> Cancel["Action Cancelled"] --> END
+  ```
+- **Authenticated Multi-Agent Endpoints (`/api/v1/agents`)**:
+  - `POST /workflows/career-twin`: Executes full 9-agent pipeline.
+  - `POST /workflows/roadmap`: Executes focused incremental roadmap sub-workflow (`skill_gaps -> career_planning -> resources -> project_recommendations`).
+  - `GET /workflows/{run_id}`: Retrieves workflow execution status and step history.
+  - `GET /approvals`: Lists queued human approval requests for the authenticated user.
+  - `GET /approvals/{id}`: Retrieves approval details.
+  - `POST /approvals/{id}/approve`: Explicitly approves and executes a queued consequential action.
+  - `POST /approvals/{id}/reject`: Rejects a queued consequential action.
+
+
 ---
 
 ## 📂 Project Structure
@@ -516,3 +568,6 @@ python scripts/train_qlora.py --smoke-test --output-dir checkpoints/qlora_smoke_
 8. **Never Invent Skills, Jobs, or Evidence**: Skill recommendations, match calculations, and career gap reports strictly anchor in actual job postings, AST imports, and validated manifests.
 9. **Transparent & Deterministic Intelligence**: Calculations are explainable and rule-based. Learning runway estimates and simulation results clearly disclose assumptions.
 10. **Privacy-Preserving AI & Consent-Gated Training**: Model weights are excluded from Git repositories and never downloaded during API startup. Training on private student/user data without explicit consent is strictly prohibited.
+11. **Never Let an LLM Approve Itself (Human-in-the-Loop)**: Any consequential actions (applications, profile updates, external exports) must pass through the `approval_workflow_agent` and remain `pending` until explicit cryptographic approval by the authenticated human user.
+12. **Zero Hallucinated URLs & Genuine Resource Verification**: The `resource_research_agent` strictly queries verified registries and enforces cryptographic HTTPS whitelist checks, guaranteeing zero invented links.
+

@@ -1,7 +1,7 @@
 """API v1 router registry."""
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import github, health, intelligence, jobs, llm, profiles, skills
+from app.api.v1.endpoints import agents, github, health, intelligence, jobs, llm, profiles, skills
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
@@ -11,3 +11,5 @@ api_router.include_router(skills.router, prefix="/skills", tags=["Skills"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["Jobs"])
 api_router.include_router(intelligence.router, prefix="/intelligence", tags=["Intelligence"])
 api_router.include_router(llm.router, prefix="/ai", tags=["AI & Career Twin Tasks"])
+api_router.include_router(agents.router, prefix="/agents", tags=["Agents"])
+

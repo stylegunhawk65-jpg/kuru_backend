@@ -1,6 +1,7 @@
 """Career Twin specialized task services leveraging structured LLM generation."""
 
 import logging
+from typing import Any
 from app.models.skill import StudentSkill
 from app.schemas.intelligence import PrioritizedGapItem
 from app.schemas.llm import (
@@ -117,6 +118,42 @@ class CareerTaskService:
         return await provider.generate_structured(
             prompt=user_prompt,
             schema=InterviewPrepResponse,
+            system_prompt=system_prompt,
+            max_tokens=650,
+            temperature=0.3,
+        )
+
+    @staticmethod
+    async def recommend_portfolio_projects(
+        provider: BaseLLMProvider,
+        target_role: str,
+        skill_gaps: list[str],
+        verified_skills: list[str],
+        matched_job_titles: list[str] | None = None,
+    ) -> Any:
+        """Synthesize concrete portfolio projects directly targeting candidate skill gaps."""
+        from app.schemas.agents import ProjectRecommendationsResponse
+
+        gaps_str = ", ".join(skill_gaps[:5]) or "Docker, Redis, System Design"
+        existing_str = ", ".join(verified_skills[:5]) or "Python, SQL"
+        jobs_context = f" Target Job Alignments: {', '.join(matched_job_titles[:3])}." if matched_job_titles else ""
+
+        system_prompt = (
+            "You are a technical hiring manager and staff software architect. "
+            "Recommend 2 impactful, portfolio-grade projects that demonstrate production competencies in missing skills. "
+            "Focus on real-world engineering value, runnable code, and measurable performance."
+        )
+
+        user_prompt = (
+            f"Target Role: {target_role}\n"
+            f"Identified Priority Skill Gaps: {gaps_str}\n"
+            f"Candidate Verified Foundation: {existing_str}\n{jobs_context}\n\n"
+            f"Recommend concrete engineering projects that directly close these gaps and prove readiness."
+        )
+
+        return await provider.generate_structured(
+            prompt=user_prompt,
+            schema=ProjectRecommendationsResponse,
             system_prompt=system_prompt,
             max_tokens=650,
             temperature=0.3,
