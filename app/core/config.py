@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
+    # Firebase Authentication
+    FIREBASE_CREDENTIALS_PATH: str | None = None
+    FIREBASE_PROJECT_ID: str | None = None
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Any) -> str:

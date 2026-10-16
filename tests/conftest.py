@@ -18,6 +18,7 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 
 from app.core.config import get_settings
 from app.db.base import Base
+import app.models  # Register all models on Base.metadata
 from app.db.session import get_db
 from app.main import create_app
 
