@@ -58,7 +58,15 @@ class LocalTransformersProvider(BaseLLMProvider):
         """Synchronously load tokenizer and model onto device."""
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-        target_source = self.model_path or self.model_id
+        # Determine local model path
+        default_local = os.path.join(os.path.expanduser("~"), ".cache", "kuru_models", "Qwen2.5-3B-Instruct")
+        target_source = self.model_path
+        if not target_source or not os.path.exists(target_source):
+            if os.path.exists(default_local) and os.path.isfile(os.path.join(default_local, "config.json")):
+                target_source = default_local
+            else:
+                target_source = self.model_id
+
         logger.info(
             "Loading local model '%s' (quantization=%s, device=%s)...",
             target_source,
@@ -76,7 +84,9 @@ class LocalTransformersProvider(BaseLLMProvider):
 
         model_kwargs: dict[str, Any] = {"trust_remote_code": True}
 
-        if self.device == "cuda" and torch.cuda.is_available():
+        use_cuda = self.device == "cuda" and torch.cuda.is_available()
+
+        if use_cuda:
             if self.quantization == "4bit":
                 bnb_config = BitsAndBytesConfig(
                     load_in_4bit=True,
@@ -98,7 +108,24 @@ class LocalTransformersProvider(BaseLLMProvider):
             model_kwargs["device_map"] = "cpu"
             model_kwargs["torch_dtype"] = torch.float32
 
-        model = AutoModelForCausalLM.from_pretrained(target_source, **model_kwargs)
+        try:
+            model = AutoModelForCausalLM.from_pretrained(target_source, **model_kwargs)
+        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+            if "CUDA" in str(exc) or "out of memory" in str(exc).lower():
+                logger.warning(
+                    "CUDA 4-bit load error (%s). Falling back to CPU float32...", exc
+                )
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                fallback_kwargs = {
+                    "device_map": "cpu",
+                    "torch_dtype": torch.float32,
+                    "trust_remote_code": True,
+                }
+                model = AutoModelForCausalLM.from_pretrained(target_source, **fallback_kwargs)
+            else:
+                raise
+
         model.eval()
 
         self._tokenizer = tokenizer

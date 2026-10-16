@@ -19,12 +19,24 @@ class LLMProviderFactory:
         """Get or initialize the requested LLM provider."""
         target = (provider_name or settings.LLM_PROVIDER).lower().strip()
 
+        if settings.ENVIRONMENT == "production":
+            if target == "mock":
+                raise ValueError(
+                    "Mock LLM provider is strictly prohibited in production environment. "
+                    "Configure a valid inference provider (e.g. LLM_PROVIDER='local')."
+                )
+            if target not in {"local", "openai_compatible"}:
+                raise ValueError(
+                    f"Invalid LLM provider '{target}' for production. "
+                    "Must be 'local' or 'openai_compatible'."
+                )
+
         if target not in self._providers:
             if target == "local":
                 logger.info("Initializing LocalTransformersProvider for local model inference...")
                 self._providers[target] = LocalTransformersProvider()
             elif target == "mock":
-                logger.info("Initializing MockLLMProvider (fast deterministic testing)...")
+                logger.info("Initializing MockLLMProvider (test/development mode)...")
                 self._providers[target] = MockLLMProvider()
             else:
                 logger.warning(

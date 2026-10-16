@@ -79,6 +79,98 @@ def extract_json_from_text(text: str) -> str:
     return text
 
 
+def attempt_json_repair(text: str) -> str | None:
+    """Attempt basic repairs for truncated or trailing delimiter JSON strings."""
+    text = text.strip()
+    if not text:
+        return None
+
+    try:
+        json.loads(text)
+        return text
+    except json.JSONDecodeError:
+        pass
+
+    in_string = False
+    escape = False
+    stack = []
+    for char in text:
+        if char == '\\' and not escape:
+            escape = True
+            continue
+        if char == '"' and not escape:
+            in_string = not in_string
+        elif not in_string:
+            if char == '{':
+                stack.append('}')
+            elif char == '[':
+                stack.append(']')
+            elif char in ('}', ']'):
+                if stack and stack[-1] == char:
+                    stack.pop()
+        escape = False
+
+    repaired = text
+    if in_string:
+        repaired += '"'
+    while stack:
+        repaired += stack.pop()
+
+    try:
+        json.loads(repaired)
+        return repaired
+    except Exception:
+        repaired = re.sub(r",\s*([\]}])", r"\1", repaired)
+        try:
+            json.loads(repaired)
+            return repaired
+        except Exception:
+            return None
+
+
+def generate_schema_skeleton(model_cls: type[BaseModel]) -> dict[str, Any]:
+    """Build an exemplar JSON skeleton for LLMs to guide clean instance generation."""
+    from typing import get_args, get_origin, Union
+
+    res: dict[str, Any] = {}
+    for name, field in model_cls.model_fields.items():
+        ann = field.annotation
+        origin = get_origin(ann)
+        args = get_args(ann)
+
+        if origin is Union:
+            non_none = [a for a in args if a is not type(None)]
+            if non_none:
+                ann = non_none[0]
+                origin = get_origin(ann)
+                args = get_args(ann)
+
+        if origin is list:
+            sub = args[0] if args else str
+            if isinstance(sub, type) and issubclass(sub, BaseModel):
+                res[name] = [generate_schema_skeleton(sub)]
+            elif sub is int:
+                res[name] = [1]
+            elif sub is float:
+                res[name] = [0.0]
+            else:
+                desc = field.description or "string"
+                res[name] = [desc]
+        elif isinstance(ann, type) and issubclass(ann, BaseModel):
+            res[name] = generate_schema_skeleton(ann)
+        elif ann is str:
+            res[name] = field.description or "string"
+        elif ann is int:
+            res[name] = 1
+        elif ann is float:
+            res[name] = 0.0
+        elif ann is bool:
+            res[name] = True
+        else:
+            res[name] = "string"
+    return res
+
+
 class BaseLLMProvider(ABC):
     """Abstract interface for local and remote LLM providers."""
 
@@ -109,10 +201,11 @@ class BaseLLMProvider(ABC):
         temperature: float = 0.2,
     ) -> T:
         """Generate structured JSON adhering to a Pydantic schema."""
-        json_schema_str = json.dumps(schema.model_json_schema(), indent=2)
+        skeleton_dict = generate_schema_skeleton(schema)
+        skeleton_json = json.dumps(skeleton_dict, indent=2)
         guidance = (
-            f"You MUST output valid JSON strictly matching this schema:\n"
-            f"```json\n{json_schema_str}\n```\n"
+            f"You MUST output valid JSON strictly matching this structure and field names:\n"
+            f"```json\n{skeleton_json}\n```\n"
             f"Do not include any prose before or after the JSON. Output only the JSON object."
         )
 
@@ -130,6 +223,12 @@ class BaseLLMProvider(ABC):
         try:
             return schema.model_validate_json(extracted_json)
         except (json.JSONDecodeError, ValidationError) as exc:
+            repaired = attempt_json_repair(extracted_json)
+            if repaired:
+                try:
+                    return schema.model_validate_json(repaired)
+                except Exception:
+                    pass
             logger.warning(
                 "Structured output parsing failed for schema '%s': %s. Raw text: %s",
                 schema.__name__,

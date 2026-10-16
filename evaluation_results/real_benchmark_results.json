@@ -1,0 +1,267 @@
+{
+  "timestamp": "2026-10-16T15:41:37Z",
+  "hardware": {
+    "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "total_vram_mb": 6140.5,
+    "cuda_available": true,
+    "torch_version": "2.5.1+cu121"
+  },
+  "provider": {
+    "name": "local",
+    "model_path": "C:\\Users\\ADMIN\\.cache\\kuru_models\\Qwen2.5-3B-Instruct",
+    "device": "cuda",
+    "quantization": "4bit"
+  },
+  "metrics": {
+    "total_cases": 5,
+    "passed_cases": 5,
+    "schema_compliance_rate_pct": 100.0,
+    "total_duration_s": 298.52,
+    "average_latency_s": 59.704,
+    "overall_peak_vram_mb": 2057.89
+  },
+  "case_results": [
+    {
+      "case_id": "eval_resume_001",
+      "task": "resume_tailor",
+      "duration_s": 44.436,
+      "peak_vram_mb": 2057.89,
+      "valid_schema": true,
+      "error": null,
+      "output_preview": {
+        "target_role": "Junior Backend Engineer",
+        "tailored_summary": "A highly skilled junior backend engineer with a strong focus on building high-scale RESTful microservices using Python, FastAPI, and PostgreSQL.",
+        "bullet_points": [
+          {
+            "original": "- Built APIs for user authentication.",
+            "tailored": "- Architected and implemented robust user authentication APIs, enhancing security by reducing login failures by 30%.",
+            "highlighted_skills": [
+              "Python",
+              "FastAPI",
+              "PostgreSQL"
+            ],
+            "impact_metric": "Reduced login failures by 30%"
+          },
+          {
+            "original": "- Used Docker to run databases locally.",
+            "tailored": "- Optimized database deployment with Docker, resulting in a 25% decrease in downtime during migrations and rollbacks.",
+            "highlighted_skills": [
+              "Docker",
+              "PostgreSQL"
+            ],
+            "impact_metric": "Decreased downtime during migrations and rollbacks by 25%"
+          }
+        ],
+        "alignment_explanation": "The bullet points have been tailored to highlight specific achievements and use quantifiable metrics to demonstrate impact."
+      }
+    },
+    {
+      "case_id": "eval_resume_002",
+      "task": "resume_tailor",
+      "duration_s": 49.905,
+      "peak_vram_mb": 2057.41,
+      "valid_schema": true,
+      "error": null,
+      "output_preview": {
+        "target_role": "Full Stack Developer",
+        "tailored_summary": "Experienced Full Stack Developer with a strong background in TypeScript, React, Node.js, and MongoDB. Proficient in building robust and scalable web applications.",
+        "bullet_points": [
+          {
+            "original": "Created frontend components for student dashboard.",
+            "tailored": "Architected and implemented 15 responsive frontend components for the student dashboard, enhancing user experience by 20% and improving load times by 30%.",
+            "highlighted_skills": [
+              "TypeScript",
+              "React",
+              "Node.js",
+              "MongoDB"
+            ],
+            "impact_metric": "User Experience Improvement of 20%, Load Time Reduction of 30%"
+          },
+          {
+            "original": "Wrote backend routes in Express.",
+            "tailored": "Engineered and optimized 20 backend routes using Express, resulting in a 40% increase in application throughput and a 25% decrease in error rates.",
+            "highlighted_skills": [
+              "TypeScript",
+              "React",
+              "Node.js",
+              "MongoDB"
+            ],
+            "impact_metric": "Throughput Increase of 40%, Error Rate Decrease of 25%"
+          }
+        ],
+        "alignment_explanation": "The bullet points were tailored to highlight specific achievements and improvements made in both frontend and backend development, incorporating verified skills and using action verbs."
+      }
+    },
+    {
+      "case_id": "eval_roadmap_001",
+      "task": "roadmap_generate",
+      "duration_s": 71.281,
+      "peak_vram_mb": 2048.46,
+      "valid_schema": true,
+      "error": null,
+      "output_preview": {
+        "target_role": "Backend Engineer",
+        "total_estimated_weeks": 16,
+        "weekly_hours_required": 12,
+        "weekly_modules": [
+          {
+            "week_number": 1,
+            "focus_skill": "Docker",
+            "objective": "Master Docker containerization and orchestration",
+            "daily_milestones": [
+              "Learn Docker basics (images, containers, networks)",
+              "Create a simple Dockerfile and run a container",
+              "Understand Docker Compose for multi-container applications",
+              "Deploy a simple application using Docker and Docker Compose"
+            ],
+            "practical_project": "A microservice using Docker and Docker Compose"
+          },
+          {
+            "week_number": 2,
+            "focus_skill": "Redis",
+            "objective": "Gain proficiency in Redis caching and data structures",
+            "daily_milestones": [
+              "Study Redis data types (strings, hashes, lists, sets, sorted sets)",
+              "Implement basic Redis commands (SET, GET, INCR)",
+              "Use Redis as a cache layer in a web application",
+              "Monitor Redis performance and troubleshoot issues"
+            ],
+            "practical_project": "A Redis-based caching system for a web application"
+          },
+          {
+            "week_number": 3,
+            "focus_skill": "Distributed Systems",
+            "objective": "Understand distributed systems concepts and design patterns",
+            "daily_milestones": [
+              "Learn about distributed systems components (client, server, network, storage)",
+              "Study common distributed system patterns (replication, load balancing, fault tolerance)",
+              "Design a simple distributed system architecture",
+              "Implement a basic distributed system (e.g., a replicated key-value store)"
+            ],
+            "practical_project": "A distributed system project (e.g., a replicated key-value store)"
+          }
+        ],
+        "learning_principles": [
+          "Hands-on experience is crucial for mastering these technologies",
+          "Continuous learning and staying updated with the latest trends",
+          "Collaboration with peers and mentors to enhance understanding"
+        ]
+      }
+    },
+    {
+      "case_id": "eval_roadmap_002",
+      "task": "roadmap_generate",
+      "duration_s": 63.441,
+      "peak_vram_mb": 2048.75,
+      "valid_schema": true,
+      "error": null,
+      "output_preview": {
+        "target_role": "Cloud DevOps Engineer",
+        "total_estimated_weeks": 12,
+        "weekly_hours_required": 15,
+        "weekly_modules": [
+          {
+            "week_number": 1,
+            "focus_skill": "Kubernetes",
+            "objective": "Master basic Kubernetes concepts and operations",
+            "daily_milestones": [
+              "Understand Kubernetes architecture, components, and deployment patterns",
+              "Learn how to create, manage, and scale Kubernetes clusters using kubectl",
+              "Practice deploying simple applications using Kubernetes manifests"
+            ],
+            "practical_project": "Create a simple Kubernetes cluster and deploy a web application"
+          },
+          {
+            "week_number": 2,
+            "focus_skill": "GitHub Actions",
+            "objective": "Set up and configure CI/CD pipelines using GitHub Actions",
+            "daily_milestones": [
+              "Learn about GitHub Actions workflow syntax and triggers",
+              "Configure a basic GitHub Actions workflow for a sample project",
+              "Test and debug the GitHub Actions workflow"
+            ],
+            "practical_project": "Implement a CI/CD pipeline for a sample project on GitHub"
+          },
+          {
+            "week_number": 3,
+            "focus_skill": "Terraform",
+            "objective": "Master Terraform configuration and resource management",
+            "daily_milestones": [
+              "Understand Terraform syntax and data structures",
+              "Learn how to define and apply infrastructure as code (IaC) using Terraform",
+              "Practice creating and managing resources in AWS using Terraform"
+            ],
+            "practical_project": "Create and manage a sample AWS infrastructure using Terraform"
+          }
+        ],
+        "learning_principles": [
+          "Hands-on practice is essential for mastering these skills",
+          "Continuous integration and deployment (CI/CD) pipelines are critical for modern software development",
+          "Infrastructure as Code (IaC) is a best practice for managing and scaling cloud environments"
+        ]
+      }
+    },
+    {
+      "case_id": "eval_interview_001",
+      "task": "interview_prep",
+      "duration_s": 69.459,
+      "peak_vram_mb": 2045.84,
+      "valid_schema": true,
+      "error": null,
+      "output_preview": {
+        "target_role": "Backend Engineer",
+        "company_focus": "Razorpay",
+        "technical_questions": [
+          {
+            "question": "How would you design a system for handling high-traffic financial transactions using FastAPI and Redis? Consider load balancing, caching, and distributed transactions.",
+            "expected_answer_points": [
+              "Design of API endpoints",
+              "Use of FastAPI for building APIs",
+              "Redis as a cache layer",
+              "Load balancer configuration",
+              "Distributed transaction management strategy"
+            ],
+            "difficulty": "Medium-High",
+            "category": "System Design"
+          },
+          {
+            "question": "Explain how you would implement a feature that allows users to subscribe to different payment gateways (e.g., PayPal, Stripe) with minimal downtime and ensure data integrity across multiple databases (PostgreSQL).",
+            "expected_answer_points": [
+              "Database schema design",
+              "Data synchronization strategies",
+              "Circuit breakers or fallbacks",
+              "Failover mechanisms",
+              "Error handling and retries"
+            ],
+            "difficulty": "High",
+            "category": "Database Design"
+          },
+          {
+            "question": "How would you handle a scenario where a user\u2019s payment is partially successful (e.g., partial refund) and ensure that the user\u2019s account balance is updated correctly without causing deadlocks or race conditions?",
+            "expected_answer_points": [
+              "Transaction isolation levels",
+              "Concurrency control techniques",
+              "Deadlock detection and prevention",
+              "Consistency checks",
+              "Optimistic vs. Pessimistic locking"
+            ],
+            "difficulty": "High",
+            "category": "Concurrency Control"
+          }
+        ],
+        "coding_challenge_topics": [
+          "FastAPI and SQLAlchemy",
+          "Redis operations",
+          "Database transactions and consistency",
+          "Concurrency control and distributed systems"
+        ],
+        "behavioral_tips": [
+          "Experience with high-traffic systems",
+          "Knowledge of distributed systems and microservices architecture",
+          "Understanding of database design patterns and ACID properties",
+          "Experience with load balancing and failover mechanisms"
+        ]
+      }
+    }
+  ]
+}

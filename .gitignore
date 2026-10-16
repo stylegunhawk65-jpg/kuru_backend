@@ -90,4 +90,5 @@ checkpoints/
 *.gguf
 *.onnx
 hf_cache/
-evaluation_results/
+evaluation_results/*
+!evaluation_results/*.json

@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     LOCAL_MODEL_PATH: str | None = None
     LOCAL_MODEL_DEVICE: str = "cuda"  # cuda, cpu
     LOCAL_MODEL_QUANTIZATION: str = "4bit"  # 4bit, 8bit, none
-    LLM_TIMEOUT_SECONDS: float = 60.0
+    LLM_TIMEOUT_SECONDS: float = 180.0
     LLM_MAX_NEW_TOKENS: int = 1024
     LLM_TEMPERATURE: float = 0.7
 

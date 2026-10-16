@@ -53,7 +53,7 @@ class CareerTaskService:
             prompt=user_prompt,
             schema=ResumeTailorResponse,
             system_prompt=system_prompt,
-            max_tokens=1024,
+            max_tokens=650,
             temperature=0.2,
         )
 
@@ -88,7 +88,7 @@ class CareerTaskService:
             prompt=user_prompt,
             schema=RoadmapGenerateResponse,
             system_prompt=system_prompt,
-            max_tokens=1200,
+            max_tokens=650,
             temperature=0.2,
         )
 
@@ -118,7 +118,7 @@ class CareerTaskService:
             prompt=user_prompt,
             schema=InterviewPrepResponse,
             system_prompt=system_prompt,
-            max_tokens=1200,
+            max_tokens=650,
             temperature=0.3,
         )
 

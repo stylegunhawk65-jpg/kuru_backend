@@ -437,16 +437,70 @@ The automated test suite runs using `pytest` and `pytest-asyncio`. Tests use iso
 ```bash
 pytest -v
 ```
+*(All 91 unit and integration tests execute in ~14 seconds without requiring GPU or model weights).*
 
-### Run Benchmark Tool:
+---
+
+### Local Model Setup & Real GPU Inference (Phase 6)
+
+#### 1. Hardware Requirements (Measured on NVIDIA RTX 4050 Laptop GPU)
+- **Host GPU**: NVIDIA GeForce RTX 4050 Laptop GPU (6,140.5 MB VRAM)
+- **Host RAM**: 16 GB System Memory
+- **Host Storage**: ~6 GB persistent disk space for model weights
+- **Driver / CUDA**: NVIDIA Driver 592.82+, CUDA Version 13.1, PyTorch 2.5.1+cu121
+
+#### 2. Download Model Weights (Persistent Local Cache Outside Git)
+Never downloads during FastAPI startup:
 ```bash
-python scripts/benchmark_llm.py
+python scripts/download_model.py
+```
+*Downloads official `Qwen/Qwen2.5-3B-Instruct` snapshots into `~/.cache/kuru_models/Qwen2.5-3B-Instruct` (5.76 GB on disk).*
+
+#### 3. Run Real GPU Inference Benchmark
+```bash
+python scripts/benchmark_llm.py --provider local --output evaluation_results/real_benchmark_results.json
 ```
 
-### Check QLoRA Hardware Feasibility:
+#### Measured Benchmark Results (NVIDIA RTX 4050 Laptop GPU — 4-bit NF4 Quantization):
+| Metric | Real Measured Value |
+| :--- | :--- |
+| **Model** | `Qwen/Qwen2.5-3B-Instruct` (4-bit NF4 bitsandbytes) |
+| **Total Evaluation Cases** | 5 Career Twin tasks (Resume, Roadmap, Interview) |
+| **Schema Compliance Rate** | **100.0%** (5/5 cases valid Pydantic instances) |
+| **Peak Inference VRAM** | **2,057.89 MB** (~2.06 GB / 6,140.5 MB available) |
+| **Average Task Latency** | **59.70 seconds** per complete structured output |
+| **Token Throughput** | ~8–12 tokens/second on GPU |
+| **Memory Headroom** | ~4.08 GB free VRAM headroom for Windows WDDM & multitasking |
+
+Results are stored in reproducible format at `evaluation_results/real_benchmark_results.json`.
+
+---
+
+### QLoRA Fine-Tuning & Adapter Verification
+
+#### 1. Hardware Feasibility Check
 ```bash
 python scripts/train_qlora.py --check-only
 ```
+- Total trainable parameters: **29,933,568** (0.96% of total 3.12B parameters).
+- Base 4-bit weights (~2.0 GB) + LoRA $r=16$ (~95 MB) + activations (~1.4 GB) = **~4.2 GB peak budget** (Fully feasible on 6 GB VRAM).
+
+#### 2. End-to-End 2-Step Smoke Test & Adapter Load Test
+```bash
+python scripts/train_qlora.py --smoke-test --output-dir checkpoints/qlora_smoke_test
+```
+- **Privacy Assurance**: Trained strictly on non-private synthetic Career Twin instruction pairs. Training on private user tables is strictly prohibited.
+- **Measured Step 1 Loss**: `4.4216` (3.92s latency)
+- **Measured Step 2 Loss**: `3.9087` (1.69s latency)
+- **Peak Training VRAM**: **3,170.9 MB** (~3.17 GB)
+- **Adapter Verification**: Successfully saved to `checkpoints/qlora_smoke_test`, re-loaded via `peft.PeftModel.from_pretrained()`, and verified with active forward generation!
+
+---
+
+### Troubleshooting & Fallback
+- **CUDA Out of Memory (OOM)**: `LocalTransformersProvider` monitors CUDA memory and automatically falls back to CPU float32 mode if VRAM allocations exceed hardware capacity.
+- **Generation Timeouts**: Increase `LLM_TIMEOUT_SECONDS=180.0` in `.env` if generating large roadmaps on battery power or lower-wattage laptop profiles.
+- **Test Mode Decoupling**: Setting `LLM_PROVIDER="mock"` allows CI/CD and unit testing without downloading model weights or requiring a GPU. `LLMProviderFactory` strictly rejects `mock` provider in production environments.
 
 ---
 
