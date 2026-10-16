@@ -43,6 +43,8 @@ venv.bak/
 *.cert
 serviceAccountKey*.json
 firebase-adminsdk*.json
+*google-services*.json
+*.keystore
 
 # Databases
 *.sqlite3

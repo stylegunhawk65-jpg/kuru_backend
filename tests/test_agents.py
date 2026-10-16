@@ -468,6 +468,32 @@ async def test_run_full_career_twin_workflow(
 
 
 @pytest.mark.asyncio
+async def test_run_full_career_twin_pipeline_bypasses_approval_gate_when_no_action(
+    db_session: AsyncSession, setup_agent_student_data, mock_provider
+):
+    """Test full 9-agent LangGraph execution pipeline when no consequential action is requested."""
+    svc = CareerTwinWorkflowService()
+    run_id, final_state = await svc.run_full_workflow(
+        db=db_session,
+        firebase_uid=USER_A_UID,
+        target_role="Backend Engineer",
+        weekly_hours=14,
+        action_to_queue=None,
+        provider=mock_provider,
+    )
+
+    assert run_id is not None
+    assert final_state["approval_status"] == "none"
+    assert final_state["pending_approval"] is None
+    assert any("approval_gate_node:bypassed_or_approved" in s for s in final_state["step_history"])
+
+    # Verify Audit Run shows completed rather than waiting_approval
+    audit = await db_session.get(AgentWorkflowRun, run_id)
+    assert audit is not None
+    assert audit.status == "completed"
+
+
+@pytest.mark.asyncio
 async def test_run_roadmap_subworkflow(
     db_session: AsyncSession, setup_agent_student_data, mock_provider
 ):
