@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str | None = None
     FIREBASE_PROJECT_ID: str | None = None
 
+    # Security & Encryption for External Tokens
+    ENCRYPTION_KEY: str = "kuru_dev_secret_key_32_bytes_safe_fallback_123="
+
+    # GitHub Integration
+    GITHUB_CLIENT_ID: str | None = None
+    GITHUB_CLIENT_SECRET: str | None = None
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Any) -> str:

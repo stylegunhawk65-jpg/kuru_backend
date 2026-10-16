@@ -8,13 +8,11 @@ The platform provides student career profiling, live verified job and internship
 
 ## 🏛️ Architecture & Capabilities
 
-### Phase 1 & 2 Foundations
+### Phase 1: Core Backend Foundations
 - **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.12+) with modern async `lifespan` lifecycle management.
-- **Authentication**: [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup) integration for cryptographic ID token verification (`Bearer <token>`). User identity is strictly derived from verified token claims (`uid`), never from client input.
 - **Database Engine**: [SQLAlchemy 2.0](https://www.sqlalchemy.org/) async engine using [asyncpg](https://github.com/MagicStack/asyncpg) with connection pooling and automated health connectivity verification. PostgreSQL serves as the primary source of truth.
 - **Database Migrations**: [Alembic](https://alembic.sqlalchemy.org/) configured for asynchronous database migrations.
-- **Career Profiles Domain**: PostgreSQL model, migration, and authenticated RESTful CRUD endpoints under `/api/v1/profiles` enforcing strict per-user data isolation.
-- **Configuration & Validation**: [Pydantic v2](https://docs.pydantic.dev/) and `pydantic-settings` with strict environment variable parsing, email validation, and production CORS protection.
+- **Configuration & Validation**: [Pydantic v2](https://docs.pydantic.dev/) and `pydantic-settings` with strict environment variable parsing and production CORS protection.
 - **Security & Error Handling**:
   - Centralized unified error handling (`AppException`, `StarletteHTTPException`, `RequestValidationError`, 500 handler).
   - Sanitized 500 responses preventing internal stack trace and secret leakage.
@@ -22,6 +20,34 @@ The platform provides student career profiling, live verified job and internship
   - Explicit environment-controlled CORS configuration (wildcard `*` prohibited in production).
 - **Health Checks**: Versioned `GET /api/v1/health` endpoint reporting overall status, version, environment, and live database connectivity status and latency.
 - **Automated Testing**: [pytest](https://docs.pytest.org/) and `pytest-asyncio` with isolated in-memory test fixtures and zero reliance on production data.
+
+### Phase 2: Firebase Auth & Career Profiles
+- **Authentication**: [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup) integration for cryptographic ID token verification (`Bearer <token>`). User identity is strictly derived from verified token claims (`uid`), never from client input.
+- **Career Profiles Domain**: PostgreSQL model, migration, and authenticated RESTful CRUD endpoints under `/api/v1/profiles` enforcing strict per-user data isolation.
+
+### Phase 3: GitHub Integration, Static Code Analysis & Skill Graph
+- **Secure GitHub OAuth / Token Handling**:
+  - Access tokens are validated with GitHub, encrypted at rest using AES/Fernet encryption, and never exposed in responses or logs.
+  - Disconnect endpoints securely wipe stored credentials.
+- **Least-Privilege Repository Selection**:
+  - Authenticated students can list accessible repositories with pagination and select specific projects for analysis.
+- **Static Code Analysis (Zero Untrusted Code Execution)**:
+  - Inspects language breakdowns and dependency manifests without executing code:
+    - Python: `requirements.txt`, `pyproject.toml`, `setup.py`, `Pipfile`
+    - JavaScript / TypeScript: `package.json`
+    - Java / Kotlin: `pom.xml`, `build.gradle`
+    - Go: `go.mod`
+    - Rust: `Cargo.toml`
+    - Containers & CI/CD: `Dockerfile`, `docker-compose.yml`, GitHub Actions workflows
+  - Static Python AST parsing to extract imported modules safely.
+  - Generates evidence-backed skills with confidence scores (0.0 to 1.0) and concrete file references.
+- **Skill Knowledge Graph**:
+  - Generates relationship edges connecting languages, frameworks, ORMs, tools, and databases (e.g. `FastAPI -> requires_language -> Python`, `SQLAlchemy -> integrates_with -> PostgreSQL`).
+  - Graph nodes and edges stored in PostgreSQL and queryable via authenticated APIs.
+- **Robust Error & Rate-Limit Handling**:
+  - Detects GitHub API rate limits (`403` / `429` with `X-RateLimit-Reset`) and returns informative client errors.
+  - Skips files exceeding 500 KB to protect system memory.
+  - Transient 5xx retries with backoff.
 
 ---
 
@@ -39,7 +65,8 @@ kuru_backend/
 │   ├── env.py                # Async migration runner connected to app settings & metadata
 │   ├── script.py.mako        # Migration revision script template
 │   └── versions/             # Database migration versions
-│       └── 001_create_student_profiles_table.py
+│       ├── 001_create_student_profiles_table.py
+│       └── 002_create_github_and_skill_tables.py
 ├── app/
 │   ├── __init__.py           # Application package marker
 │   ├── main.py               # FastAPI application factory, lifespan, CORS, and root routes
@@ -48,17 +75,26 @@ kuru_backend/
 │   │   ├── auth.py           # Firebase Admin SDK authentication dependency & token verification
 │   │   ├── config.py         # Settings management and environment validation
 │   │   ├── exceptions.py     # Unified application exceptions and error handlers
-│   │   └── logging.py        # Centralized structured logging with credential masking
+│   │   ├── logging.py        # Centralized structured logging with credential masking
+│   │   └── security.py       # Symmetric Fernet encryption for external access tokens
 │   ├── db/
 │   │   ├── __init__.py
 │   │   ├── base.py           # SQLAlchemy DeclarativeBase and TimestampMixin
 │   │   └── session.py        # Async engine, sessionmaker, and connectivity verification
 │   ├── models/
 │   │   ├── __init__.py       # Database models registry
-│   │   └── profile.py        # StudentProfile SQLAlchemy model
+│   │   ├── github.py         # GithubConnection, GithubRepository, RepositoryAnalysis models
+│   │   ├── profile.py        # StudentProfile model
+│   │   └── skill.py          # StudentSkill and SkillGraphEdge models
 │   ├── schemas/
 │   │   ├── __init__.py       # Pydantic validation schemas registry
-│   │   └── profile.py        # Request/response schemas for StudentProfile
+│   │   ├── github.py         # GitHub connection, repo selection, and analysis schemas
+│   │   ├── profile.py        # StudentProfile request/response schemas
+│   │   └── skill.py          # Extracted skills and skill graph schemas
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── analyzer.py       # Static manifest & AST parser, skill taxonomy, and graph builder
+│   │   └── github_client.py  # Asynchronous GitHub API client with rate-limiting & retries
 │   └── api/
 │       ├── __init__.py
 │       └── v1/
@@ -66,15 +102,20 @@ kuru_backend/
 │           ├── router.py     # Aggregated v1 API router
 │           └── endpoints/
 │               ├── __init__.py
+│               ├── github.py   # GitHub connect, repos, analyze, and results endpoints
 │               ├── health.py   # GET /api/v1/health endpoint
-│               └── profiles.py # Authenticated student career profile CRUD endpoints
+│               ├── profiles.py # Authenticated student career profile CRUD endpoints
+│               └── skills.py   # Extracted skills and knowledge graph endpoints
 └── tests/
     ├── __init__.py
     ├── conftest.py           # Pytest fixtures, test database engine, and async client
+    ├── test_analyzer.py      # Static parser, AST extractor, and skill graph tests
     ├── test_auth.py          # Firebase authentication and token verification tests
     ├── test_config.py        # Configuration and sensitive data filter tests
     ├── test_database.py      # Database session and connectivity check tests
     ├── test_exceptions.py    # Error response uniformity and secret protection tests
+    ├── test_github_api.py    # GitHub connect, analyze, skills, graph, and isolation tests
+    ├── test_github_client.py # GitHub client rate-limiting, timeout, and retry tests
     ├── test_health.py        # Health and root discovery endpoint tests
     └── test_profiles.py      # Student profile CRUD and cross-user isolation tests
 ```
@@ -88,6 +129,7 @@ kuru_backend/
 - **Python**: Version 3.12 or higher.
 - **PostgreSQL**: Version 15 or higher (recommended for local development).
 - **Firebase Project**: A Firebase project with Firebase Authentication enabled.
+- **GitHub Account / OAuth App**: Personal Access Token (PAT) with `repo` scope or registered GitHub OAuth App.
 
 ### 1. Clone & Navigate
 
@@ -155,12 +197,18 @@ DB_POOL_TIMEOUT=30.0
 LOG_LEVEL="INFO"
 
 # Firebase Authentication Configuration
-# Provide path to your serviceAccountKey.json or set project ID
 # FIREBASE_CREDENTIALS_PATH="/path/to/serviceAccountKey.json"
 # FIREBASE_PROJECT_ID="your-firebase-project-id"
+
+# Encryption Key for GitHub Access Tokens at Rest
+ENCRYPTION_KEY="kuru_dev_secret_key_32_bytes_safe_fallback_123="
+
+# GitHub OAuth App Configuration (Optional)
+# GITHUB_CLIENT_ID="your_github_client_id"
+# GITHUB_CLIENT_SECRET="your_github_client_secret"
 ```
 
-> **Security Note**: Never commit your real `.env` file, database passwords, or serviceAccountKey credentials to git. The `.gitignore` file is preconfigured to prevent this.
+> **Security Note**: Never commit your real `.env` file, database passwords, or service credentials to git. The `.gitignore` file is preconfigured to prevent this.
 
 ---
 
@@ -178,16 +226,6 @@ alembic upgrade head
 alembic history
 ```
 
-### Create a New Migration Revision
-```bash
-alembic revision --autogenerate -m "describe changes"
-```
-
-### Revert One Migration
-```bash
-alembic downgrade -1
-```
-
 ---
 
 ## 🏃 Running the Application Locally
@@ -198,79 +236,65 @@ Start the backend with `uvicorn`:
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Or run via Python:
-```bash
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-```
+### Interactive Documentation
 
-### Endpoints Available
-
-- **API Documentation (Swagger UI)**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **API Documentation (ReDoc)**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
-- **Root Index**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-- **Versioned Health Endpoint**: [http://127.0.0.1:8000/api/v1/health](http://127.0.0.1:8000/api/v1/health)
+- **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+- **Health Endpoint**: [http://127.0.0.1:8000/api/v1/health](http://127.0.0.1:8000/api/v1/health)
 
 ---
 
-## 🔐 Authentication & Career Profile Endpoints
+## 📡 API Endpoints Overview
 
-All endpoints under `/api/v1/profiles` require a valid Firebase ID token in the `Authorization` header:
-`Authorization: Bearer <FIREBASE_ID_TOKEN>`
+All protected endpoints require `Authorization: Bearer <FIREBASE_ID_TOKEN>`.
 
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/profiles` | Create career profile for authenticated user (bound to token `uid`) | Yes |
-| `GET` | `/api/v1/profiles/me` | Retrieve profile of the authenticated student | Yes |
-| `GET` | `/api/v1/profiles/{id}` | Retrieve profile by ID (isolated to owner) | Yes |
-| `PUT` | `/api/v1/profiles/me` | Update career profile attributes for authenticated student | Yes |
-| `DELETE` | `/api/v1/profiles/me` | Delete career profile of authenticated student | Yes |
+### GitHub & Codebase Analysis Endpoints (`/api/v1/github`)
 
-### Sample Profile Creation Request (`POST /api/v1/profiles`)
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/github/connect` | Connect GitHub token (encrypted at rest, never returned in response) |
+| `GET` | `/api/v1/github/status` | Get GitHub connection status (username, avatar, scopes) |
+| `DELETE` | `/api/v1/github/disconnect` | Disconnect GitHub and wipe encrypted credentials |
+| `GET` | `/api/v1/github/repos` | List user repositories with pagination |
+| `POST` | `/api/v1/github/repos/select` | Select specific repositories for analysis |
+| `POST` | `/api/v1/github/analyze` | Trigger static analysis on selected repositories |
+| `GET` | `/api/v1/github/analysis/{id}` | Retrieve results of a specific repository analysis |
 
-```json
-{
-  "full_name": "Aarav Sharma",
-  "email": "aarav.sharma@example.edu",
-  "education": [
-    {
-      "institution": "Indian Institute of Technology, Bombay",
-      "degree": "B.Tech",
-      "field_of_study": "Computer Science and Engineering",
-      "start_year": 2022,
-      "end_year": 2026,
-      "grade_or_cgpa": "8.8/10"
-    }
-  ],
-  "interests": ["Machine Learning", "Distributed Systems", "Cloud Computing"],
-  "target_roles": ["Software Engineer", "Backend Developer", "ML Engineer"],
-  "preferred_locations": ["Bengaluru", "Hyderabad", "Pune", "Remote"],
-  "bio": "Third-year CSE undergraduate passionate about large-scale backend systems."
-}
-```
+### Skills & Knowledge Graph Endpoints (`/api/v1/skills`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/skills` | Retrieve all evidence-backed skills extracted for current user |
+| `GET` | `/api/v1/skills/graph` | Retrieve student skill knowledge graph (nodes, edges, metrics) |
+
+### Career Profile Endpoints (`/api/v1/profiles`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/profiles` | Create student career profile bound to verified Firebase token |
+| `GET` | `/api/v1/profiles/me` | Retrieve profile of authenticated student |
+| `GET` | `/api/v1/profiles/{id}` | Retrieve profile by ID (isolated to owner) |
+| `PUT` | `/api/v1/profiles/me` | Update career profile attributes |
+| `DELETE` | `/api/v1/profiles/me` | Delete career profile |
 
 ---
 
 ## 🧪 Testing
 
-The automated test suite runs using `pytest` and `pytest-asyncio`. Tests use isolated in-memory SQLite fixtures with no external database or external Firebase network dependencies.
+The automated test suite runs using `pytest` and `pytest-asyncio`. Tests use isolated in-memory SQLite fixtures with zero external network or database dependencies.
 
 Run all tests:
 ```bash
-pytest
-```
-
-Run with verbose output:
-```bash
-python -m pytest -v
+pytest -v
 ```
 
 ---
 
 ## 🔒 Security Principles
 
-1. **Never Trust Client-Supplied User IDs**: User identities are extracted solely from verified Firebase ID token claims (`uid`). Clients cannot impersonate other users by injecting foreign IDs.
-2. **Per-User Data Isolation**: Database queries strictly filter by `StudentProfile.firebase_uid == current_user.uid`. Users cannot read, modify, or delete another student's career profile.
-3. **No Sensitive Leaks**: Exception handlers scrub internal Python exceptions and stack traces in non-debug mode.
-4. **Log Sanitization**: Connection strings, bearer tokens, passwords, and sensitive keys are automatically scrubbed by `SensitiveDataFilter`.
-5. **Strict CORS**: Cross-Origin Resource Sharing is controlled via environment variables; wildcard origins (`*`) are rejected in production.
-6. **Isolated Fixtures**: Test suites run on isolated in-memory fixtures; real production credentials or fake data are never mixed.
+1. **Zero Untrusted Code Execution**: All repository analysis uses static AST parsing and manifest inspection. Untrusted code is never run in `eval`, `exec`, or shell processes.
+2. **Encrypted Access Tokens**: External GitHub tokens are encrypted at rest with Fernet symmetric encryption and never returned in API responses or written to logs.
+3. **Never Trust Client-Supplied User IDs**: User identities are extracted solely from verified Firebase ID token claims (`uid`).
+4. **Per-User Data Isolation**: Database queries strictly filter by `firebase_uid == current_user.uid`.
+5. **No Sensitive Leaks**: Exception handlers scrub internal Python exceptions and stack traces in non-debug mode.
+6. **Log Sanitization**: Bearer tokens, passwords, database strings, and connection credentials are scrubbed by `SensitiveDataFilter`.
