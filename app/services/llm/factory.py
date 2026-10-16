@@ -54,6 +54,6 @@ class LLMProviderFactory:
 llm_factory = LLMProviderFactory()
 
 
-def get_llm_provider() -> BaseLLMProvider:
+def get_llm_provider(provider_name: str | None = None) -> BaseLLMProvider:
     """Convenience accessor for active LLM provider."""
-    return llm_factory.get_provider()
+    return llm_factory.get_provider(provider_name)

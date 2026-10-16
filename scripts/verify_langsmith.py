@@ -75,12 +75,28 @@ async def main() -> int:
 
     # 4. Run Multi-Agent Workflow Smoke Test with Tracing Active
     print("\n[3] Executing Multi-Agent Pipeline with LangSmith Tracing Active...")
-    from app.db.session import async_session_factory
+    from app.db.base import Base
+    import app.models  # Ensure all models are registered on Base
+    from app.db.session import async_session_factory, check_db_connectivity
     from app.services.agents.workflow import workflow_service
     from app.services.llm.factory import get_llm_provider
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     test_uid = "langsmith_smoke_test_user"
-    async with async_session_factory() as db:
+    db_status = await check_db_connectivity()
+    temp_engine = None
+
+    if db_status.get("status") == "connected":
+        print("  - Using active PostgreSQL database connection.")
+        session_maker = async_session_factory
+    else:
+        print("  - PostgreSQL offline; spinning up isolated in-memory SQLite session for smoke test...")
+        temp_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+        async with temp_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        session_maker = async_sessionmaker(bind=temp_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with session_maker() as db:
         try:
             provider = get_llm_provider("mock")
             run_id, state = await workflow_service.run_roadmap_subworkflow(
@@ -96,6 +112,9 @@ async def main() -> int:
         except Exception as wf_err:
             print(f"  [ERROR] Workflow execution failed: {wf_err}")
             return 3
+        finally:
+            if temp_engine:
+                await temp_engine.dispose()
 
     print("\n" + "=" * 65)
     print("  SMOKE TEST PASSED: Traces successfully dispatched to LangSmith!")

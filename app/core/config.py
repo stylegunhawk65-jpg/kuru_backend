@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # CORS settings
-    CORS_ORIGINS: Annotated[list[str], BeforeValidator(parse_cors_origins)] = [
+    CORS_ORIGINS: Annotated[list[str] | str, BeforeValidator(parse_cors_origins)] = [
         "http://localhost:3000",
         "http://localhost:8000",
         "http://127.0.0.1:3000",
