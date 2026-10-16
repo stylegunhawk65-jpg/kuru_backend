@@ -569,11 +569,61 @@ python scripts/train_qlora.py --smoke-test --output-dir checkpoints/qlora_smoke_
   ```
   Validates environment configuration, tests LangSmith API connectivity, and runs an end-to-end multi-agent workflow trace.
 
-#### 2. Firebase Authentication
-- **Backend Admin SDK**: Initialized via service account certificate (`invest-887ce`) with cryptographic verification of ID tokens.
-- **Token Claims**: User identities are derived strictly from token claims (`uid`). Unauthenticated requests are rejected with 401.
+#### 2. Firebase Authentication & ID Token Lifecycle
+- **Backend Admin SDK**: Initialized using service account credentials or target project ID (`career-ba46c`) with cryptographic verification of ID tokens (`verify_id_token`).
+- **Token Claims & Authorization**: User identity is derived strictly from verified token claims (`uid`). Unauthenticated requests are rejected with 401. Protected endpoints enforce per-user isolation against the authenticated `uid`.
+- **Flutter Token Management**:
+  - `AuthService` handles email/password registration, login, and sign-out via `FirebaseAuth`.
+  - `ApiClient` automatically injects Bearer tokens via `tokenProvider` and triggers token refresh when expired.
+  - Cross-platform session persistence supported via `TokenStorage`.
 
-#### 3. Flutter Mobile Frontend (`kuru_app`)
+#### 3. Cloud Firestore & Real-Time Sync
+- **Data Boundary & Separation of Concerns**:
+  - **PostgreSQL**: Serves as the immutable primary source of truth for relational student profiles, GitHub static code analyses, skill knowledge graphs, verified job postings, intelligence scores, and LangGraph checkpoints. Relational data is never needlessly replicated into NoSQL.
+  - **Cloud Firestore**: Dedicated exclusively to real-time mobile preferences (`users/{userId}/settings/preferences`), lightweight study notes (`users/{userId}/career_notes`), and offline mobile cache synchronization.
+- **Strict User Isolation & Security Rules**:
+  - Firestore security rules strictly constrain document access to the authenticated user's own subtree:
+    ```javascript
+    rules_version = '2';
+    service cloud.firestore {
+      match /databases/{database}/documents {
+        match /users/{userId}/{document=**} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+        }
+      }
+    }
+    ```
+  - Backend sync endpoints (`/api/v1/sync/preferences` and `/api/v1/sync/notes`) cryptographically enforce isolation and reject any cross-user parameter tampering with `403 Forbidden` (`FIRESTORE_ACCESS_DENIED`).
+
+#### 4. Firebase Console Manual Setup Guide
+To configure Firebase for the Kuru system:
+1. **Enable Firebase Authentication**:
+   - Navigate to **Firebase Console** -> Select project `career-ba46c` (or your project).
+   - Go to **Build** -> **Authentication** -> **Sign-in method**.
+   - Enable the **Email/Password** provider and save.
+2. **Provision Cloud Firestore**:
+   - Go to **Build** -> **Firestore Database** -> **Create database**.
+   - Select **Native mode**.
+   - Choose a nearby region (e.g., `asia-south1` (Mumbai) for low Indian latency).
+3. **Deploy Security Rules**:
+   - Open the **Rules** tab in Cloud Firestore, paste the security rules from `firestore.rules` (or run `firebase deploy --only firestore:rules`), and click **Publish**.
+4. **Android App Registration (`google-services.json`)**:
+   - In **Project Settings** -> **General** -> **Your apps**, verify the Android app package is `com.kuru.app.kuru_app`.
+   - Download `google-services.json` and place it in:
+     ```
+     kuru_app/android/app/google-services.json
+     ```
+   *(Note: This file is excluded from git tracking via `.gitignore` to protect API keys).*
+5. **Backend Service Account Credentials**:
+   - In **Project Settings** -> **Service accounts**, click **Generate new private key**.
+   - Save the credentials JSON securely on your host outside the git repository.
+   - Configure the path in your `.env` file:
+     ```env
+     FIREBASE_PROJECT_ID="career-ba46c"
+     FIREBASE_CREDENTIALS_PATH="/path/to/serviceAccountKey.json"
+     ```
+
+#### 5. Flutter Mobile Frontend (`kuru_app`)
 - **Structure**: Modern Flutter client located in `kuru_app/` connecting to the FastAPI backend.
 - **Dynamic API Base URLs**:
   - Android Emulator: `http://10.0.2.2:8000/api/v1`
@@ -584,7 +634,7 @@ python scripts/train_qlora.py --smoke-test --output-dir checkpoints/qlora_smoke_
   2. **Jobs & Internships Screen**: Search, filter by work mode (remote/hybrid/on-site), view transparent match percentages, matched skills (green), missing skills (amber), and bookmark jobs.
   3. **Skill Gaps & Simulator Screen**: Evidence-backed codebase skills, prioritized market gaps, and an interactive What-If Simulator projecting score lifts and newly unlocked jobs.
   4. **Approvals Screen**: Human-in-the-loop decision gate allowing students to inspect, approve, or reject consequential agent actions with feedback.
-  5. **Profile & Settings Screen**: Student profile management, GitHub connection & analysis trigger, system observability diagnostics, and sign-out.
+  5. **Profile & Settings Screen**: Student profile management, GitHub connection & analysis trigger, Cloud Firestore study notes & preferences, system observability diagnostics, and sign-out.
 - **Testing & Verification**:
   ```bash
   cd kuru_app

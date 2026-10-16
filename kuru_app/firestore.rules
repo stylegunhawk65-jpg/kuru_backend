@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User profile, preferences, notes, and activity isolation
+    // Users can only read, write, update, and delete their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // All subcollections (settings, preferences, career_notes, activity) inherit strict user isolation
+      match /{allSubcollections=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Default deny: All unauthenticated or cross-user access to arbitrary documents is blocked
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

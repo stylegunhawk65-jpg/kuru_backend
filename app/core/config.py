@@ -50,13 +50,9 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
-    # Firebase Authentication
-    FIREBASE_CREDENTIALS_PATH: str | None = (
-        "C:/Users/ADMIN/OneDrive/Desktop/firebase-secrets/invest-887ce-firebase-adminsdk-fbsvc-9baf4b4d75.json"
-        if __import__("os").path.isfile("C:/Users/ADMIN/OneDrive/Desktop/firebase-secrets/invest-887ce-firebase-adminsdk-fbsvc-9baf4b4d75.json")
-        else None
-    )
-    FIREBASE_PROJECT_ID: str | None = "invest-887ce"
+    # Firebase Authentication & Cloud Firestore
+    FIREBASE_CREDENTIALS_PATH: str | None = None
+    FIREBASE_PROJECT_ID: str = "career-ba46c"
 
     # Security & Encryption for External Tokens
     ENCRYPTION_KEY: str = "kuru_dev_secret_key_32_bytes_safe_fallback_123="
