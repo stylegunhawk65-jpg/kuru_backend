@@ -56,16 +56,21 @@ class SavedJobCreate(BaseModel):
     notes: str | None = Field(None, max_length=1000, description="Personal application notes")
     status: str = Field(
         default="saved",
-        pattern="^(saved|applied|archived)$",
-        description="Tracking status: saved, applied, or archived",
+        pattern="^(saved|applied|interviewing|offered|rejected|archived)$",
+        description="Tracking status: saved, applied, interviewing, offered, rejected, archived",
     )
+    deadline: datetime | None = None
+    resume_id: str | None = None
 
 
 class SavedJobUpdate(BaseModel):
     """Request payload to update tracking status or notes for a saved job."""
 
     notes: str | None = Field(None, max_length=1000)
-    status: str | None = Field(None, pattern="^(saved|applied|archived)$")
+    status: str | None = Field(None, pattern="^(saved|applied|interviewing|offered|rejected|archived)$")
+    deadline: datetime | None = None
+    submitted_at: datetime | None = None
+    resume_id: str | None = None
 
 
 class SavedJobResponse(BaseModel):
@@ -76,6 +81,10 @@ class SavedJobResponse(BaseModel):
     job_id: str
     status: str
     notes: str | None = None
+    deadline: datetime | None = None
+    submitted_at: datetime | None = None
+    resume_id: str | None = None
+    application_packet: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
     job: JobPostingResponse | None = None

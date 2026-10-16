@@ -84,15 +84,19 @@ async def trigger_source_sync(
     description="Retrieve all bookmarked jobs with application status and private notes for the authenticated user.",
 )
 async def get_saved_jobs(
+    status_filter: str | None = Query(None, alias="status", description="Filter by status (saved, applied, interviewing, offered, rejected, archived)"),
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[SavedJobResponse]:
-    """Retrieve saved jobs for current user."""
+    """Retrieve saved jobs/applications for current user."""
     stmt = (
         select(SavedJob)
         .where(SavedJob.firebase_uid == current_user.uid)
-        .order_by(SavedJob.created_at.desc())
     )
+    if status_filter:
+        stmt = stmt.where(SavedJob.status == status_filter)
+    stmt = stmt.order_by(SavedJob.created_at.desc())
+
     res = await db.execute(stmt)
     saved_items = res.scalars().all()
 
@@ -111,6 +115,10 @@ async def get_saved_jobs(
                 job_id=item.job_id,
                 status=item.status,
                 notes=item.notes,
+                deadline=item.deadline,
+                submitted_at=item.submitted_at,
+                resume_id=item.resume_id,
+                application_packet=item.application_packet or {},
                 created_at=item.created_at,
                 updated_at=item.updated_at,
                 job=posting_schema,
@@ -124,7 +132,7 @@ async def get_saved_jobs(
     "/saved/{job_id}",
     response_model=SavedJobResponse,
     summary="Update Saved Job Status or Notes",
-    description="Update tracking state (saved, applied, archived) or personal notes for a saved job.",
+    description="Update tracking state (saved, applied, interviewing, offered, rejected, archived), deadline, or notes.",
 )
 async def update_saved_job(
     job_id: str,
@@ -132,7 +140,7 @@ async def update_saved_job(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SavedJobResponse:
-    """Update notes or status on a saved job."""
+    """Update notes, status, deadline, or submitted date on a saved job."""
     stmt = select(SavedJob).where(
         SavedJob.firebase_uid == current_user.uid,
         SavedJob.job_id == job_id,
@@ -147,6 +155,12 @@ async def update_saved_job(
         saved_record.status = payload.status
     if payload.notes is not None:
         saved_record.notes = payload.notes
+    if payload.deadline is not None:
+        saved_record.deadline = payload.deadline
+    if payload.submitted_at is not None:
+        saved_record.submitted_at = payload.submitted_at
+    if payload.resume_id is not None:
+        saved_record.resume_id = payload.resume_id
 
     await db.commit()
     await db.refresh(saved_record)
@@ -162,8 +176,12 @@ async def update_saved_job(
         job_id=saved_record.job_id,
         status=saved_record.status,
         notes=saved_record.notes,
+        deadline=saved_record.deadline,
+        submitted_at=saved_record.submitted_at,
+        resume_id=saved_record.resume_id,
+        application_packet=saved_record.application_packet or {},
         created_at=saved_record.created_at,
-        updated_at=saved_record.updated_record if hasattr(saved_record, "updated_record") else saved_record.updated_at,
+        updated_at=saved_record.updated_at,
         job=JobPostingResponse.model_validate(posting) if posting else None,
     )
 
@@ -398,6 +416,10 @@ async def save_job(
         existing.status = payload.status
         if payload.notes is not None:
             existing.notes = payload.notes
+        if payload.deadline is not None:
+            existing.deadline = payload.deadline
+        if payload.resume_id is not None:
+            existing.resume_id = payload.resume_id
         await db.commit()
         await db.refresh(existing)
         saved_rec = existing
@@ -408,6 +430,8 @@ async def save_job(
             job_id=job_id,
             status=payload.status,
             notes=payload.notes,
+            deadline=payload.deadline,
+            resume_id=payload.resume_id,
         )
         db.add(new_saved)
         await db.commit()
@@ -420,6 +444,10 @@ async def save_job(
         job_id=saved_rec.job_id,
         status=saved_rec.status,
         notes=saved_rec.notes,
+        deadline=saved_rec.deadline,
+        submitted_at=saved_rec.submitted_at,
+        resume_id=saved_rec.resume_id,
+        application_packet=saved_rec.application_packet or {},
         created_at=saved_rec.created_at,
         updated_at=saved_rec.updated_at,
         job=JobPostingResponse.model_validate(job),

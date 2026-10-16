@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
     agents,
+    applications,
     assessments,
     firestore_sync,
     github,
@@ -11,6 +12,7 @@ from app.api.v1.endpoints import (
     jobs,
     llm,
     profiles,
+    resumes,
     skillproof,
     skills,
 )
@@ -27,6 +29,8 @@ api_router.include_router(agents.router, prefix="/agents", tags=["Agents"])
 api_router.include_router(firestore_sync.router, prefix="/sync", tags=["Firestore Sync"])
 api_router.include_router(skillproof.router, prefix="/skillproof", tags=["SkillProof Engine"])
 api_router.include_router(assessments.router, prefix="/assessments", tags=["Practical Assessments"])
+api_router.include_router(resumes.router, prefix="/resumes", tags=["Resumes"])
+api_router.include_router(applications.router, prefix="/applications", tags=["Applications"])
 
 
 

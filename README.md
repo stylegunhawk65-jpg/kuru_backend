@@ -849,6 +849,48 @@ Phase 10 connects Phase 8 (SkillProof Engine) repository evidence and Phase 9 (P
 
 ---
 
+### Phase 11: Resume & Application Integration
+
+Phase 11 connects Kuru's evidence-backed skills, verified GitHub projects, and Phase 9 practical assessment results directly into real career outcomes through tailored ATS-friendly resumes, automated evidence citation maps, pure-Python PDF generation, application tracking, and consequential approval gates.
+
+#### 1. Evidence-Backed ATS Resume Generation & Anti-Hallucination Guarantee
+- **Strict Grounding**: Resumes synthesize candidate contact information, verified skills, and GitHub repositories directly from PostgreSQL records and AST analysis.
+- **Zero Hallucination Guarantee**: Resumes **never** invent work experience, skills, degrees, GPA, or metrics. Unverified skills or missing education items are never fabricated or replaced with fake placeholders.
+- **Evidence Citations Map**: Every technical skill and claim includes an `evidence_citations` mapping linking directly to physical repository source files, line ranges, or practical assessment scores (e.g. `Python: ["app/main.py", "services/matcher.py", "Practical Sandbox Assessment (Intermediate Coding - Passed 92%)"]`).
+- **Practical Verification Badges**: Highlights passing sandbox assessments with objective scores ($\ge 70\%$) and challenge levels (Basic, Intermediate, Advanced).
+
+#### 2. Real Job-Specific Tailoring
+- **Target Role & Job Alignment**: Align phrasing and skill emphasis against a real `JobPosting` description while maintaining complete factual honesty.
+- **Match Breakdown in Resume Metadata**: Tracks `matching_skills`, `missing_skills`, target company, and ATS score estimates. Missing job-required skills are recognized as learning opportunities rather than falsely claimed.
+
+#### 3. Pure-Python ATS PDF Exporter (`reportlab`)
+- **Fast & Portable**: Built using pure-Python `reportlab` (v5.0.1+), requiring zero external binary dependencies (`wkhtmltopdf`, `weasyprint`, or Cairo) for cross-platform portability across Windows and Linux.
+- **ATS Machine Readability**: Employs single-column linear flowables, standard system typography (`Helvetica`, `Helvetica-Bold`), bold semantic headings, clean contact headers, categorized skill matrices, and linear divider flowables for flawless parsing by modern applicant tracking systems.
+- **Direct Binary Streaming**: Downloadable via `GET /api/v1/resumes/{id}/pdf` with proper `Content-Disposition: attachment; filename="Candidate_Name_Resume.pdf"` headers.
+
+#### 4. Job Application Tracking & Lifecycle Management
+- **Application Lifecycle**: Tracks saved jobs across states: `saved`, `applied`, `interviewing`, `offered`, `rejected`, and `archived`.
+- **Metadata Management**: Supports deadlines, application submission dates, personal candidate tracking notes, and linked tailored resume versions.
+- **Endpoints**:
+  - `POST /api/v1/applications/prepare`: Synthesizes application packet and stages approval request.
+  - `GET /api/v1/applications`: Lists tracked applications with job posting details and status filtering.
+  - `GET /api/v1/applications/{job_id}`: Retrieves single application tracking details.
+  - `PATCH /api/v1/applications/{job_id}`: Updates application status, notes, or deadlines.
+  - `DELETE /api/v1/applications/{job_id}`: Removes an application tracking record.
+
+#### 5. Human-in-the-Loop Consequential Application Approval Gate
+- **Zero Auto-Apply Guarantee**: Calling `POST /api/v1/applications/prepare` stages the tailored application materials and queues an `AgentApprovalRequest` in PostgreSQL, but **never** submits externally.
+- **State Guarantee**: While pending approval, `SavedJob.status` remains `"saved"` and `SavedJob.submitted_at` is `None`.
+- **Explicit Approval Execution**: Only when the candidate explicitly reviews and approves the request (`approval_workflow_agent.decide_approval(..., decision="approved")`) does executing the action transition `SavedJob.status = "applied"` and record a UTC `submitted_at` timestamp.
+
+#### 6. Flutter Cross-Platform Integration
+- **ATS Resume Studio (`ResumeScreen`)**: Interactive UI for generating, viewing, editing, regenerating, and downloading ATS resumes with evidence citations and assessment badges.
+- **Job Tracker & Preparation (`JobsScreen`)**: Enhanced with status badges, deadline indicators, and a one-tap "Prepare Application" workflow that stages application packets and informs the student to review materials under the Approvals tab.
+- **Central Navigation (`MainNavigationScreen`)**: Added dedicated Resumes tab alongside Twin, Jobs, Skill Gaps, Approvals, and Profile.
+- **Client Services**: Added `ResumeService` and `ApplicationService` with Bearer token injection, automatic token refresh, and binary PDF downloading (`getBytes`).
+
+---
+
 ## 🔒 Security & Operational Principles
 
 1. **Zero Untrusted Code Execution in Main Process**: All repository analysis uses static AST parsing and manifest inspection. Untrusted code is never run in `eval`, `exec`, or shell processes within the backend application.
@@ -867,5 +909,6 @@ Phase 10 connects Phase 8 (SkillProof Engine) repository evidence and Phase 9 (P
 14. **Honest SkillProof & Similarity Integrity**: Similarity scores indicate syntactic, structural, or lexical overlap with canonical patterns. High similarity to reference boilerplate is normal and expected; similarity alone must never be used to judge student competency, claim plagiarism, or assert AI generation. Missing reference coverage is explicitly reported.
 15. **Sandbox Isolation & Fair Practical Assessment**: Untrusted code is strictly executed inside isolated subprocesses with pre-execution AST security filters, scrubbed environments, and hard timeouts. Hidden tests are structurally shielded from public view. Objective test scores govern pass/fail determinations ($\ge 70\%$). High template similarity triggers constructive debugging challenges rather than punitive accusations.
 16. **Fairness & Honest Projections in Career Intelligence**: SkillProof repository similarity percentages are strictly decoupled from competency evaluations. What-if career simulations explicitly state assumptions and prominently include disclaimers that projections are mathematical estimates and not hiring guarantees.
+17. **Anti-Hallucination Resume Grounding & Zero Auto-Apply**: Resumes strictly represent verified student profile data, repository AST imports, and practical assessment results. Fabrication of degrees, jobs, skills, or metrics is categorically forbidden. Consequential job application actions are staged for explicit human approval via the approval agent and are never automatically submitted to external systems.
 
 

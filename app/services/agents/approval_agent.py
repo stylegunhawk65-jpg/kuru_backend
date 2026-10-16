@@ -165,6 +165,19 @@ class ApprovalWorkflowAgent:
             execution_result["message"] = (
                 f"Application package prepared and approved for job '{approval.target_entity_id}'."
             )
+            from app.models.job import SavedJob
+            job_id = approval.target_entity_id
+            if job_id:
+                sj_stmt = select(SavedJob).where(
+                    SavedJob.firebase_uid == approval.firebase_uid,
+                    SavedJob.job_id == job_id,
+                )
+                sj_res = await db.execute(sj_stmt)
+                sj_record = sj_res.scalar_one_or_none()
+                if sj_record:
+                    sj_record.status = "applied"
+                    sj_record.submitted_at = datetime.now(timezone.utc)
+                    execution_result["submitted_at"] = sj_record.submitted_at.isoformat()
         elif approval.action_type == "resume_export":
             execution_result["message"] = "Tailored resume bundle generated for export."
         else:

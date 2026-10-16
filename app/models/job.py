@@ -1,6 +1,7 @@
 """SQLAlchemy models for Job Postings, Job Sources, and Saved Jobs."""
 
 from datetime import datetime, timezone
+from typing import Any
 import uuid
 from sqlalchemy import (
     JSON,
@@ -118,5 +119,9 @@ class SavedJob(Base, TimestampMixin):
         String(32),
         default="saved",
         nullable=False,
-    )  # saved, applied, archived
+    )  # saved, applied, interviewing, offered, rejected, archived
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resume_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    application_packet: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)

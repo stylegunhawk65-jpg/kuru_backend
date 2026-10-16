@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuru_app/models/agent_workflow.dart';
+import 'package:kuru_app/models/job_application.dart';
 import 'package:kuru_app/models/job_listing.dart';
+import 'package:kuru_app/models/resume.dart';
 import 'package:kuru_app/models/skill_gap.dart';
 import 'package:kuru_app/models/user_profile.dart';
 
@@ -118,6 +120,136 @@ void main() {
       expect(req.actionType, 'submit_application');
       expect(req.status, 'pending');
       expect(req.payload['job_id'], 'job_ind_789');
+    });
+  });
+
+  group('Resume & Application Tracking Models', () {
+    test('ResumeModel parses complex ATS resume with verified citations and assessments', () {
+      final resumeJson = {
+        'id': 'res_123',
+        'firebase_uid': 'test_user_789',
+        'title': 'ATS Tailored Resume - Razorpay',
+        'target_role': 'Backend Engineer',
+        'job_id': 'job_ind_789',
+        'is_primary': true,
+        'contact_info': {
+          'name': 'Aarav Sharma',
+          'email': 'aarav@example.com',
+          'phone': '+91-9876543210',
+          'github': 'github.com/aaravsharma',
+          'location': 'Bangalore, India',
+        },
+        'summary': 'Evidence-grounded Backend Engineer with practical proficiency in Python and FastAPI.',
+        'skills_by_category': {
+          'Backend': [
+            {
+              'name': 'Python',
+              'category': 'Backend',
+              'evidence_paths': ['app/main.py', 'services/matcher.py'],
+              'proficiency_level': 'verified',
+              'assessment_score': 95.0,
+            },
+            {
+              'name': 'FastAPI',
+              'category': 'Backend',
+              'evidence_paths': ['app/api/v1/router.py'],
+              'proficiency_level': 'verified',
+              'assessment_score': 90.0,
+            },
+          ],
+        },
+        'experience': [],
+        'projects': [
+          {
+            'title': 'Kuru Backend',
+            'repo_name': 'kuru_backend',
+            'summary': 'Microservices backend using FastAPI and PostgreSQL.',
+            'bullets': [
+              'Architected ATS resume generation engine with zero hallucination guarantee.',
+            ],
+            'technologies': ['Python', 'FastAPI', 'PostgreSQL'],
+            'github_url': 'https://github.com/aaravsharma/kuru_backend',
+          },
+        ],
+        'education': [
+          {
+            'institution': 'IIT Bombay',
+            'degree': 'B.Tech',
+            'graduation_year': 2026,
+            'field_of_study': 'Computer Science',
+          },
+        ],
+        'practical_assessments': [
+          {
+            'skill_name': 'Python',
+            'score': 95.0,
+            'level': 'intermediate',
+            'passed': true,
+            'verification_date': '2026-10-16',
+          },
+        ],
+        'tailoring_metadata': {
+          'target_role': 'Backend Engineer',
+          'target_company': 'Razorpay',
+          'job_id': 'job_ind_789',
+          'matched_skills': ['Python', 'FastAPI'],
+          'missing_skills': ['Docker'],
+          'evidence_citations': {
+            'Python': ['app/main.py'],
+            'FastAPI': ['app/api/v1/router.py'],
+          },
+          'anti_hallucination_verified': true,
+        },
+      };
+
+      final resume = ResumeModel.fromJson(resumeJson);
+      expect(resume.id, 'res_123');
+      expect(resume.contactInfo.name, 'Aarav Sharma');
+      expect(resume.skillsByCategory['Backend']?.length, 2);
+      expect(resume.practicalAssessments.first.passed, isTrue);
+      expect(resume.tailoringMetadata?.antiHallucinationVerified, isTrue);
+      expect(resume.tailoringMetadata?.evidenceCitations['Python'], contains('app/main.py'));
+
+      final serialized = resume.toJson();
+      expect(serialized['id'], 'res_123');
+      expect(serialized['title'], 'ATS Tailored Resume - Razorpay');
+    });
+
+    test('JobApplication and ApplicationPrepareResult parse lifecycle and stage approval', () {
+      final appJson = {
+        'id': 'app_rec_001',
+        'firebase_uid': 'test_user_789',
+        'job_id': 'job_ind_789',
+        'status': 'applied',
+        'notes': 'Submitted following approval.',
+        'deadline': '2026-11-01',
+        'submitted_at': '2026-10-16T18:00:00Z',
+        'resume_id': 'res_123',
+        'application_packet': {
+          'match_score': 88.0,
+          'requires_human_approval': true,
+          'auto_submission_prevented': true,
+        },
+      };
+
+      final app = JobApplication.fromJson(appJson);
+      expect(app.id, 'app_rec_001');
+      expect(app.status, 'applied');
+      expect(app.applicationPacket['auto_submission_prevented'], isTrue);
+
+      final prepJson = {
+        'job_id': 'job_ind_789',
+        'approval_request_id': 105,
+        'status': 'pending_approval',
+        'application_packet': {
+          'job_title': 'Backend Developer',
+        },
+      };
+
+      final prep = ApplicationPrepareResult.fromJson(prepJson);
+      expect(prep.jobId, 'job_ind_789');
+      expect(prep.approvalRequestId, 105);
+      expect(prep.status, 'pending_approval');
     });
   });
 }

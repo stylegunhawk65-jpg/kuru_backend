@@ -51,6 +51,25 @@ from app.schemas.profile import (
     StudentProfileResponse,
     StudentProfileUpdate,
 )
+from app.schemas.resume import (
+    ResumeAssessmentItem,
+    ResumeContactInfo,
+    ResumeCreate,
+    ResumeEducationItem,
+    ResumeExperienceItem,
+    ResumeGenerateRequest,
+    ResumeProjectItem,
+    ResumeResponse,
+    ResumeSkillItem,
+    ResumeTailoringMetadata,
+    ResumeUpdate,
+)
+from app.schemas.application import (
+    ApplicationDetailResponse,
+    ApplicationPrepareRequest,
+    ApplicationPrepareResponse,
+    ApplicationUpdateRequest,
+)
 from app.schemas.skill import (
     SkillEvidenceItem,
     SkillGraphEdgeResponse,

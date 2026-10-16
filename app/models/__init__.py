@@ -4,6 +4,7 @@ from app.models.github import GithubConnection, GithubRepository, RepositoryAnal
 from app.models.intelligence import CareerAssessment
 from app.models.job import JobPosting, JobSource, SavedJob
 from app.models.profile import StudentProfile
+from app.models.resume import Resume
 from app.models.skill import SkillGraphEdge, StudentSkill
 from app.models.skillproof import SkillProofEvidence, SkillProofRun
 
@@ -17,6 +18,7 @@ __all__ = [
     "JobPosting",
     "JobSource",
     "SavedJob",
+    "Resume",
     "CareerAssessment",
     "AgentApprovalRequest",
     "AgentWorkflowRun",
