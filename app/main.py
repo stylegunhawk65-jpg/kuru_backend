@@ -15,6 +15,7 @@ from app.core.logging import setup_logging
 from app.db.session import check_db_connectivity, close_db_engine
 
 from app.services.observability import setup_langsmith_environment
+from app.services.scheduler import notification_scheduler
 
 logger = logging.getLogger("kuru.main")
 
@@ -46,9 +47,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             db_status.get("message"),
         )
 
+    # Start background scheduler unless running in testing environment
+    if settings.ENVIRONMENT != "testing":
+        await notification_scheduler.start()
+
     yield
 
     # Shutdown actions
+    if settings.ENVIRONMENT != "testing":
+        await notification_scheduler.stop()
+
     logger.info("Shutting down %s", settings.PROJECT_NAME)
     await close_db_engine()
 

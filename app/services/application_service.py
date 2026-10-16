@@ -29,6 +29,7 @@ from app.schemas.resume import ResumeGenerateRequest
 from app.services.agents.approval_agent import approval_workflow_agent
 from app.services.llm.base import BaseLLMProvider
 from app.services.matcher import calculate_job_match
+from app.services.notification_service import notification_service
 from app.services.resume.service import resume_service
 
 logger = logging.getLogger("kuru.applications.service")
@@ -289,7 +290,9 @@ class ApplicationService:
         if not rec:
             raise ResourceNotFoundError("Job application", job_id)
 
+        old_status = rec.status
         if payload.status is not None:
+            notification_service.validate_status_transition(old_status, payload.status)
             rec.status = payload.status
         if payload.notes is not None:
             rec.notes = payload.notes
@@ -300,6 +303,15 @@ class ApplicationService:
 
         await db.commit()
         await db.refresh(rec)
+
+        if payload.status is not None and payload.status != old_status:
+            await notification_service.handle_application_status_change(
+                db=db,
+                firebase_uid=firebase_uid,
+                job_id=job_id,
+                old_status=old_status,
+                new_status=payload.status,
+            )
 
         post_stmt = select(JobPosting).where(JobPosting.id == rec.job_id)
         posting = (await db.execute(post_stmt)).scalar_one_or_none()

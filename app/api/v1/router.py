@@ -11,7 +11,9 @@ from app.api.v1.endpoints import (
     intelligence,
     jobs,
     llm,
+    notifications,
     profiles,
+    reminders,
     resumes,
     skillproof,
     skills,
@@ -31,6 +33,8 @@ api_router.include_router(skillproof.router, prefix="/skillproof", tags=["SkillP
 api_router.include_router(assessments.router, prefix="/assessments", tags=["Practical Assessments"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["Resumes"])
 api_router.include_router(applications.router, prefix="/applications", tags=["Applications"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+api_router.include_router(reminders.router, prefix="/reminders", tags=["Reminders"])
 
 
 

@@ -891,6 +891,61 @@ Phase 11 connects Kuru's evidence-backed skills, verified GitHub projects, and P
 
 ---
 
+### 🔔 Phase 12: In-App Notifications, Application Lifecycle Tracking, Reminders & Lightweight Background Scheduler
+
+Phase 12 completes the operational candidate workflows by introducing persistent in-app notifications, candidate-configurable reminders, strict application lifecycle state machine validations, and an in-process `asyncio` background scheduler that eliminates heavy infrastructure dependencies (no Celery, RabbitMQ, or Redis).
+
+#### 1. In-App Notifications (`Notification` Model & API)
+- **Persistent Storage**: Saved in PostgreSQL table `notifications` with compound indexes on `(firebase_uid, is_read)` and `(firebase_uid, created_at)`.
+- **Notification Types**:
+  - `application_update`: Automated alerts when applications transition state (`applied`, `offered`, `rejected`, `archived`, `saved`).
+  - `interview`: Celebratory milestone alerts when candidate reaches the interviewing stage (`🎉 Interview Stage Reached!`).
+  - `deadline`: Urgent approaching deadline alerts ($\le 24$ hours) or overdue alerts.
+  - `follow_up`: Actionable reminders to contact recruiters or submit coding assignments.
+  - `system`: Onboarding and system alerts.
+- **API Endpoints**:
+  - `GET /api/v1/notifications`: List paginated notifications with filters (`is_read`, `notification_type`).
+  - `GET /api/v1/notifications/unread-count`: Lightweight badge count.
+  - `PATCH /api/v1/notifications/{id}/read`: Mark individual notification read/unread.
+  - `POST /api/v1/notifications/mark-all-read`: Batch mark all notifications read.
+  - `DELETE /api/v1/notifications/{id}`: Delete notification.
+
+#### 2. User-Configurable Reminders (`Reminder` Model & API)
+- **Persistent Storage**: Saved in PostgreSQL table `reminders` with compound indexes on `(firebase_uid, is_completed, is_dismissed)` and `(firebase_uid, due_date)`.
+- **Overdue Computation**: Dynamic evaluation against UTC current time.
+- **API Endpoints**:
+  - `POST /api/v1/reminders`: Create custom reminder with title, description, due date, and reminder type (`follow_up`, `deadline`, `custom`).
+  - `GET /api/v1/reminders`: List reminders with status filter (`active`, `completed`, `dismissed`, `overdue`).
+  - `GET /api/v1/reminders/{id}`: Retrieve reminder details.
+  - `PATCH /api/v1/reminders/{id}`: Update reminder fields.
+  - `POST /api/v1/reminders/{id}/complete`: Mark reminder as completed with completion timestamp.
+  - `POST /api/v1/reminders/{id}/dismiss`: Dismiss reminder without completing.
+  - `DELETE /api/v1/reminders/{id}`: Delete reminder.
+
+#### 3. Application Lifecycle State Machine & Transition Rules
+- **State Machine Rules**:
+  - `saved` $\to$ `applied`, `interviewing`, `archived`
+  - `applied` $\to$ `interviewing`, `offered`, `rejected`, `archived`
+  - `interviewing` $\to$ `offered`, `rejected`, `archived`
+  - `offered` $\to$ `rejected`, `archived`
+  - `rejected` $\to$ `archived`, `saved` (re-open)
+  - `archived` $\to$ `saved`
+- **Validation**: Enforced across `PATCH /api/v1/applications/{job_id}` and `PATCH /api/v1/jobs/saved/{job_id}`. Invalid jumps (e.g. `saved` $\to$ `offered`, `rejected` $\to$ `interviewing`) return `400 Bad Request` with `INVALID_STATUS_TRANSITION`.
+- **Automated Lifecycle Notifications**: Transitioning an application triggers automated in-app notifications.
+
+#### 4. Lightweight Background Scheduler (`NotificationScheduler`)
+- **Zero Heavy Infrastructure**: Implemented purely in `asyncio` within FastAPI process `lifespan`. No Celery, Redis, or external brokers.
+- **Deadlines Check**: Periodically scans `SavedJob` with deadlines within 24 hours and creates deadline notifications.
+- **Reminders Check**: Periodically scans active `Reminder` records with `due_date <= now_utc` and creates follow-up notifications.
+- **Deduplication Engine**: Enforces idempotency via entity-based checks, strictly preventing duplicate notifications.
+
+#### 5. Flutter Integration & Unified Alerts UI
+- **Alerts & Reminders Hub (`NotificationsScreen`)**: Dual-tab interface for viewing notifications and managing reminders with filter chips (`All`, `Active`, `Overdue`, `Completed`), mark-as-read controls, and a floating action button to create new reminders.
+- **Navigation Integration (`MainNavigationScreen`)**: Added `Alerts` tab with notification bell iconography.
+- **Dart Services & Models**: `NotificationService`, `ReminderService`, `NotificationItem`, and `ReminderItem`.
+
+---
+
 ## 🔒 Security & Operational Principles
 
 1. **Zero Untrusted Code Execution in Main Process**: All repository analysis uses static AST parsing and manifest inspection. Untrusted code is never run in `eval`, `exec`, or shell processes within the backend application.
@@ -910,5 +965,7 @@ Phase 11 connects Kuru's evidence-backed skills, verified GitHub projects, and P
 15. **Sandbox Isolation & Fair Practical Assessment**: Untrusted code is strictly executed inside isolated subprocesses with pre-execution AST security filters, scrubbed environments, and hard timeouts. Hidden tests are structurally shielded from public view. Objective test scores govern pass/fail determinations ($\ge 70\%$). High template similarity triggers constructive debugging challenges rather than punitive accusations.
 16. **Fairness & Honest Projections in Career Intelligence**: SkillProof repository similarity percentages are strictly decoupled from competency evaluations. What-if career simulations explicitly state assumptions and prominently include disclaimers that projections are mathematical estimates and not hiring guarantees.
 17. **Anti-Hallucination Resume Grounding & Zero Auto-Apply**: Resumes strictly represent verified student profile data, repository AST imports, and practical assessment results. Fabrication of degrees, jobs, skills, or metrics is categorically forbidden. Consequential job application actions are staged for explicit human approval via the approval agent and are never automatically submitted to external systems.
+18. **Notification Integrity & Anti-Spam Scheduling**: In-app notifications are strictly scoped to the authenticated user and delivered through persistent, deduplicated application tracking and reminder events. Background schedules operate in-process without unsolicited external spam.
+
 
 

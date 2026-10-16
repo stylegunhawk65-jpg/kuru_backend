@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kuru_app/models/agent_workflow.dart';
 import 'package:kuru_app/models/job_application.dart';
 import 'package:kuru_app/models/job_listing.dart';
+import 'package:kuru_app/models/notification_item.dart';
+import 'package:kuru_app/models/reminder_item.dart';
 import 'package:kuru_app/models/resume.dart';
 import 'package:kuru_app/models/skill_gap.dart';
 import 'package:kuru_app/models/user_profile.dart';
@@ -250,6 +252,65 @@ void main() {
       expect(prep.jobId, 'job_ind_789');
       expect(prep.approvalRequestId, 105);
       expect(prep.status, 'pending_approval');
+    });
+  });
+
+  group('Notification & Reminder Models', () {
+    test('NotificationItem parses JSON, serializes back, and supports copyWith', () {
+      final notifJson = {
+        'id': 'notif_001',
+        'firebase_uid': 'user_123',
+        'title': 'Interview Scheduled',
+        'message': 'Round 1 technical discussion with Razorpay.',
+        'notification_type': 'interview',
+        'entity_type': 'application',
+        'entity_id': 'job_789',
+        'is_read': false,
+        'data': {'job_id': 'job_789'},
+        'created_at': '2026-10-17T03:00:00Z',
+        'updated_at': '2026-10-17T03:00:00Z',
+      };
+
+      final item = NotificationItem.fromJson(notifJson);
+      expect(item.id, 'notif_001');
+      expect(item.title, 'Interview Scheduled');
+      expect(item.notificationType, 'interview');
+      expect(item.isRead, isFalse);
+
+      final readCopy = item.copyWith(isRead: true);
+      expect(readCopy.isRead, isTrue);
+
+      final jsonOut = item.toJson();
+      expect(jsonOut['id'], 'notif_001');
+      expect(jsonOut['notification_type'], 'interview');
+    });
+
+    test('ReminderItem correctly parses JSON and computes overdue status', () {
+      final pastDue = DateTime.now().subtract(const Duration(hours: 3)).toUtc().toIso8601String();
+      final reminderJson = {
+        'id': 'rem_001',
+        'firebase_uid': 'user_123',
+        'job_id': 'job_789',
+        'title': 'Submit take-home assignment',
+        'description': 'Follow up with recruiter on GitHub repo link',
+        'due_date': pastDue,
+        'reminder_type': 'deadline',
+        'is_completed': false,
+        'is_dismissed': false,
+        'created_at': '2026-10-16T12:00:00Z',
+        'updated_at': '2026-10-16T12:00:00Z',
+      };
+
+      final rem = ReminderItem.fromJson(reminderJson);
+      expect(rem.id, 'rem_001');
+      expect(rem.title, 'Submit take-home assignment');
+      expect(rem.reminderType, 'deadline');
+      expect(rem.isCompleted, isFalse);
+      expect(rem.isOverdue, isTrue);
+
+      final completed = rem.copyWith(isCompleted: true, isOverdue: false);
+      expect(completed.isCompleted, isTrue);
+      expect(completed.isOverdue, isFalse);
     });
   });
 }

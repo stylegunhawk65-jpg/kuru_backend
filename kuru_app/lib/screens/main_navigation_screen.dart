@@ -7,11 +7,14 @@ import '../services/firestore_service.dart';
 import '../services/github_service.dart';
 import '../services/intelligence_service.dart';
 import '../services/jobs_service.dart';
+import '../services/notification_service.dart';
 import '../services/profile_service.dart';
+import '../services/reminder_service.dart';
 import '../services/resume_service.dart';
 import 'approvals_screen.dart';
 import 'career_twin_screen.dart';
 import 'jobs_screen.dart';
+import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'resume_screen.dart';
 import 'skill_gaps_screen.dart';
@@ -26,6 +29,8 @@ class MainNavigationScreen extends StatefulWidget {
   final FirestoreService? firestoreService;
   final ResumeService? resumeService;
   final ApplicationService? applicationService;
+  final NotificationService? notificationService;
+  final ReminderService? reminderService;
 
   const MainNavigationScreen({
     super.key,
@@ -38,6 +43,8 @@ class MainNavigationScreen extends StatefulWidget {
     this.firestoreService,
     this.resumeService,
     this.applicationService,
+    this.notificationService,
+    this.reminderService,
   });
 
   @override
@@ -63,6 +70,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (widget.resumeService != null)
         ResumeScreen(resumeService: widget.resumeService!),
       ApprovalsScreen(workflowService: widget.workflowService),
+      if (widget.notificationService != null && widget.reminderService != null)
+        NotificationsScreen(
+          notificationService: widget.notificationService!,
+          reminderService: widget.reminderService!,
+        ),
       ProfileScreen(
         profileService: widget.profileService,
         githubService: widget.githubService,
@@ -107,6 +119,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             selectedIcon: Icon(Icons.verified_user, color: AppTheme.primaryColor),
             label: 'Approvals',
           ),
+          if (widget.notificationService != null && widget.reminderService != null)
+            const NavigationDestination(
+              icon: Icon(Icons.notifications_outlined),
+              selectedIcon: Icon(Icons.notifications, color: AppTheme.primaryColor),
+              label: 'Alerts',
+            ),
           const NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person, color: AppTheme.primaryColor),

@@ -3,6 +3,7 @@ from app.models.assessment import AssessmentSubmission, PracticalAssessment
 from app.models.github import GithubConnection, GithubRepository, RepositoryAnalysis
 from app.models.intelligence import CareerAssessment
 from app.models.job import JobPosting, JobSource, SavedJob
+from app.models.notification import Notification, Reminder
 from app.models.profile import StudentProfile
 from app.models.resume import Resume
 from app.models.skill import SkillGraphEdge, StudentSkill
@@ -26,6 +27,8 @@ __all__ = [
     "SkillProofEvidence",
     "PracticalAssessment",
     "AssessmentSubmission",
+    "Notification",
+    "Reminder",
 ]
 
 

@@ -175,9 +175,18 @@ class ApprovalWorkflowAgent:
                 sj_res = await db.execute(sj_stmt)
                 sj_record = sj_res.scalar_one_or_none()
                 if sj_record:
+                    old_st = sj_record.status
                     sj_record.status = "applied"
                     sj_record.submitted_at = datetime.now(timezone.utc)
                     execution_result["submitted_at"] = sj_record.submitted_at.isoformat()
+                    from app.services.notification_service import notification_service
+                    await notification_service.handle_application_status_change(
+                        db=db,
+                        firebase_uid=approval.firebase_uid,
+                        job_id=job_id,
+                        old_status=old_st,
+                        new_status="applied",
+                    )
         elif approval.action_type == "resume_export":
             execution_result["message"] = "Tailored resume bundle generated for export."
         else:

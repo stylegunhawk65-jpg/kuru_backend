@@ -120,8 +120,9 @@ async def test_mock_llm_provider_failure_modes():
         await provider.generate_structured("test prompt", SimpleTestSchema)
 
 
-def test_local_transformers_provider_lazy_loading_and_safety():
+def test_local_transformers_provider_lazy_loading_and_safety(monkeypatch):
     """Test LocalTransformersProvider initializes safely without downloading weights."""
+    monkeypatch.setattr("torch.cuda.is_available", lambda: False)
     provider = LocalTransformersProvider(
         model_id="Qwen/Qwen2.5-3B-Instruct",
         device="cuda",

@@ -71,6 +71,8 @@ class ApiConfig {
   static String get agentsApprovalsEndpoint => '$apiBaseUrl/agents/approvals';
   static String get resumesEndpoint => '$apiBaseUrl/resumes';
   static String get applicationsEndpoint => '$apiBaseUrl/applications';
+  static String get notificationsEndpoint => '$apiBaseUrl/notifications';
+  static String get remindersEndpoint => '$apiBaseUrl/reminders';
 
   // Request timeout duration
   static const Duration requestTimeout = Duration(seconds: 45);

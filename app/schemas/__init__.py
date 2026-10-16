@@ -70,6 +70,16 @@ from app.schemas.application import (
     ApplicationPrepareResponse,
     ApplicationUpdateRequest,
 )
+from app.schemas.notification import (
+    NotificationListResponse,
+    NotificationResponse,
+    NotificationUpdate,
+    ReminderCreate,
+    ReminderListResponse,
+    ReminderResponse,
+    ReminderUpdate,
+    UnreadCountResponse,
+)
 from app.schemas.skill import (
     SkillEvidenceItem,
     SkillGraphEdgeResponse,
@@ -125,4 +135,12 @@ __all__ = [
     "InterviewPrepResponse",
     "ModelHealthResponse",
     "BenchmarkResultResponse",
+    "NotificationResponse",
+    "NotificationUpdate",
+    "NotificationListResponse",
+    "UnreadCountResponse",
+    "ReminderCreate",
+    "ReminderUpdate",
+    "ReminderResponse",
+    "ReminderListResponse",
 ]

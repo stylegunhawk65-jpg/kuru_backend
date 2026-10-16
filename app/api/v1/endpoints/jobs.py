@@ -26,6 +26,7 @@ from app.schemas.job import (
 )
 from app.services.job_sources.aggregator import job_source_manager
 from app.services.matcher import calculate_job_match
+from app.services.notification_service import notification_service
 
 logger = logging.getLogger("kuru.jobs")
 router = APIRouter()
@@ -151,7 +152,9 @@ async def update_saved_job(
     if not saved_record:
         raise ResourceNotFoundError("Saved job record", job_id)
 
+    old_status = saved_record.status
     if payload.status is not None:
+        notification_service.validate_status_transition(old_status, payload.status)
         saved_record.status = payload.status
     if payload.notes is not None:
         saved_record.notes = payload.notes
@@ -164,6 +167,15 @@ async def update_saved_job(
 
     await db.commit()
     await db.refresh(saved_record)
+
+    if payload.status is not None and payload.status != old_status:
+        await notification_service.handle_application_status_change(
+            db=db,
+            firebase_uid=current_user.uid,
+            job_id=job_id,
+            old_status=old_status,
+            new_status=payload.status,
+        )
 
     # Load associated posting
     post_stmt = select(JobPosting).where(JobPosting.id == job_id)

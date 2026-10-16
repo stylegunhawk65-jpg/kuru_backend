@@ -14,7 +14,9 @@ import 'services/firestore_service.dart';
 import 'services/github_service.dart';
 import 'services/intelligence_service.dart';
 import 'services/jobs_service.dart';
+import 'services/notification_service.dart';
 import 'services/profile_service.dart';
+import 'services/reminder_service.dart';
 import 'services/resume_service.dart';
 
 void main() async {
@@ -56,6 +58,8 @@ void main() async {
   final workflowService = AgentWorkflowService(apiClient);
   final resumeService = ResumeService(apiClient);
   final applicationService = ApplicationService(apiClient);
+  final notificationService = NotificationService(apiClient);
+  final reminderService = ReminderService(apiClient);
 
   runApp(KuruApp(
     authService: authService,
@@ -67,6 +71,8 @@ void main() async {
     workflowService: workflowService,
     resumeService: resumeService,
     applicationService: applicationService,
+    notificationService: notificationService,
+    reminderService: reminderService,
   ));
 }
 
@@ -80,6 +86,8 @@ class KuruApp extends StatelessWidget {
   final AgentWorkflowService workflowService;
   final ResumeService? resumeService;
   final ApplicationService? applicationService;
+  final NotificationService? notificationService;
+  final ReminderService? reminderService;
 
   const KuruApp({
     super.key,
@@ -92,6 +100,8 @@ class KuruApp extends StatelessWidget {
     required this.workflowService,
     this.resumeService,
     this.applicationService,
+    this.notificationService,
+    this.reminderService,
   });
 
   @override
@@ -118,6 +128,8 @@ class KuruApp extends StatelessWidget {
                   firestoreService: firestoreService,
                   resumeService: resumeService,
                   applicationService: applicationService,
+                  notificationService: notificationService,
+                  reminderService: reminderService,
                 )
               : LoginScreen(authService: authService),
         );
