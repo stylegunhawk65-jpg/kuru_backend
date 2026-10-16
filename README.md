@@ -70,6 +70,33 @@ The platform provides student career profiling, live verified job and internship
   - User-isolated bookmarking (`POST /{job_id}/save`, `DELETE /{job_id}/save`, `GET /saved`, `PATCH /saved/{job_id}`).
   - Provider health and sync monitoring (`GET /sources/status`, `POST /sources/sync`).
 
+### Phase 5: Career Intelligence, Explainable Skill-Gap Analysis & What-If Simulations
+- **Explainable Skill-Gap Analysis & Readiness Tiers**:
+  - Evaluates student portfolio against live market postings to compute an overall fit score and milestone readiness tier:
+    - **Ready** ($\ge 80\%$)
+    - **High** ($65 - 79\%$)
+    - **Moderate** ($45 - 64\%$)
+    - **Developing** ($25 - 44\%$)
+    - **Early** ($< 25\%$)
+- **Prioritized Skill Gaps (Multi-Factor Scoring)**:
+  - Missing skills are ranked using a deterministic composite formula:
+    $$\text{Priority Score} = \text{Market Demand}\,(50\%) + \text{Graph Proximity}\,(30\%) + \text{Career Interest Alignment}\,(20\%)$$
+  - **Graph Proximity Synergy**: Leverages Phase 3 `SkillGraphEdge` and taxonomy to detect 1-hop learning synergies (e.g. knowing Python gives high synergy for FastAPI or Django).
+  - Generates verifiable, human-readable justification for every ranked gap.
+- **Actionable Skill Recommendations**:
+  - Pinpoints the top 5 high-return skills to acquire, measuring the exact number of currently mismatched jobs that will be unlocked.
+  - Provides learning effort estimates based on graph proximity (`Low: 1-2 weeks`, `Medium: 3-4 weeks`, `High: 5-8 weeks`).
+- **Deterministic Career-Path Comparison**:
+  - Compares 2 to 5 candidate career tracks (e.g. Backend Engineer vs. Data Scientist vs. DevOps Engineer).
+  - Measures market demand, current portfolio readiness, critical skill gaps, and estimated learning runway.
+  - Fully transparent assumptions: clearly labels study hours ($10-15\text{ hrs/week}$) and foundation dependencies.
+- **What-If Simulation Engine**:
+  - Simulates the impact of hypothetical skill acquisitions (e.g. "What if I learn Docker and Redis?").
+  - Calculates score delta ($+\Delta\%$), newly unlocked job opportunities, resolved gaps, and remaining gaps with full assumption disclosures.
+- **PostgreSQL Persistence & Snapshot Refresh**:
+  - Assessments are persisted in the `career_assessments` table (`004_create_career_intelligence_tables.py`).
+  - Supports automated caching and on-demand refresh (`POST /api/v1/intelligence/skill-gaps/refresh`) when repositories or profiles evolve.
+
 ---
 
 ## 📂 Project Structure
@@ -88,7 +115,8 @@ kuru_backend/
 │   └── versions/             # Database migration versions
 │       ├── 001_create_student_profiles_table.py
 │       ├── 002_create_github_and_skill_tables.py
-│       └── 003_create_job_and_source_tables.py
+│       ├── 003_create_job_and_source_tables.py
+│       └── 004_create_career_intelligence_tables.py
 ├── app/
 │   ├── __init__.py           # Application package marker
 │   ├── main.py               # FastAPI application factory, lifespan, CORS, and root routes
@@ -106,18 +134,21 @@ kuru_backend/
 │   ├── models/
 │   │   ├── __init__.py       # Database models registry
 │   │   ├── github.py         # GithubConnection, GithubRepository, RepositoryAnalysis models
+│   │   ├── intelligence.py   # CareerAssessment model for persisted reports
 │   │   ├── job.py            # JobPosting, JobSource, SavedJob models
 │   │   ├── profile.py        # StudentProfile model
 │   │   └── skill.py          # StudentSkill and SkillGraphEdge models
 │   ├── schemas/
 │   │   ├── __init__.py       # Pydantic validation schemas registry
 │   │   ├── github.py         # GitHub connection, repo selection, and analysis schemas
+│   │   ├── intelligence.py   # Skill gap, recommendation, compare, and what-if schemas
 │   │   ├── job.py            # Job listings, match breakdown, and saved jobs schemas
 │   │   ├── profile.py        # StudentProfile request/response schemas
 │   │   └── skill.py          # Extracted skills and skill graph schemas
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── analyzer.py       # Static manifest & AST parser, skill taxonomy, and graph builder
+│   │   ├── career_intelligence.py # Explainable skill gap analysis, recommendations, and simulations
 │   │   ├── github_client.py  # Asynchronous GitHub API client with rate-limiting & retries
 │   │   ├── matcher.py        # Transparent rule-based skill and profile job matching engine
 │   │   └── job_sources/      # Modular job source adapters & aggregator
@@ -135,11 +166,12 @@ kuru_backend/
 │           ├── router.py     # Aggregated v1 API router
 │           └── endpoints/
 │               ├── __init__.py
-│               ├── github.py   # GitHub connect, repos, analyze, and results endpoints
-│               ├── health.py   # GET /api/v1/health endpoint
-│               ├── jobs.py     # Authenticated job search, ranking, saving, and sync endpoints
-│               ├── profiles.py # Authenticated student career profile CRUD endpoints
-│               └── skills.py   # Extracted skills and knowledge graph endpoints
+│               ├── github.py       # GitHub connect, repos, analyze, and results endpoints
+│               ├── health.py       # GET /api/v1/health endpoint
+│               ├── intelligence.py # Skill gaps, recommendations, comparison, and what-if
+│               ├── jobs.py         # Authenticated job search, ranking, saving, and sync endpoints
+│               ├── profiles.py     # Authenticated student career profile CRUD endpoints
+│               └── skills.py       # Extracted skills and knowledge graph endpoints
 └── tests/
     ├── __init__.py
     ├── conftest.py           # Pytest fixtures, test database engine, and async client
@@ -151,6 +183,7 @@ kuru_backend/
     ├── test_github_api.py    # GitHub connect, analyze, skills, graph, and isolation tests
     ├── test_github_client.py # GitHub client rate-limiting, timeout, and retry tests
     ├── test_health.py        # Health and root discovery endpoint tests
+    ├── test_intelligence.py   # Skill gap analysis, recommendations, compare, and what-if tests
     ├── test_job_sources.py   # Adapters, normalization, deduplication, and sync tests
     ├── test_jobs.py          # Job search, transparent ranking, saved jobs, and isolation tests
     └── test_profiles.py      # Student profile CRUD and cross-user isolation tests
@@ -289,6 +322,16 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 All protected endpoints require `Authorization: Bearer <FIREBASE_ID_TOKEN>`.
 
+### Career Intelligence Endpoints (`/api/v1/intelligence`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/intelligence/skill-gaps` | Retrieve cached or initial skill-gap assessment report |
+| `POST` | `/api/v1/intelligence/skill-gaps/refresh` | Force re-evaluation of skill gaps, market demand, and persisted snapshot |
+| `GET` | `/api/v1/intelligence/recommendations` | Get prioritized skill recommendations with market demand and effort estimates |
+| `POST` | `/api/v1/intelligence/career-paths/compare` | Compare candidate career paths (2 to 5 roles) with runway and readiness metrics |
+| `POST` | `/api/v1/intelligence/what-if` | Run what-if simulation to measure impact of acquiring hypothetical skills |
+
 ### Job Discovery & Matching Endpoints (`/api/v1/jobs`)
 
 | Method | Endpoint | Description |
@@ -344,7 +387,7 @@ pytest -v
 
 ---
 
-## 🔒 Security Principles
+## 🔒 Security & Operational Principles
 
 1. **Zero Untrusted Code Execution**: All repository analysis uses static AST parsing and manifest inspection. Untrusted code is never run in `eval`, `exec`, or shell processes.
 2. **Encrypted Access Tokens**: External GitHub tokens are encrypted at rest with Fernet symmetric encryption and never returned in API responses or written to logs.
@@ -353,3 +396,5 @@ pytest -v
 5. **No Sensitive Leaks**: Exception handlers scrub internal Python exceptions and stack traces in non-debug mode.
 6. **Log Sanitization**: Bearer tokens, passwords, database strings, and connection credentials are scrubbed by `SensitiveDataFilter`.
 7. **Terms of Service Compliance**: In compliance with platform terms, job discovery relies exclusively on permitted open APIs and verified partner connections; unauthenticated scraping and bot protection bypasses are strictly prohibited.
+8. **Never Invent Skills, Jobs, or Evidence**: Skill recommendations, match calculations, and career gap reports strictly anchor in actual job postings, AST imports, and validated manifests.
+9. **Transparent & Deterministic Intelligence**: Calculations are explainable and rule-based. Learning runway estimates and simulation results clearly disclose assumptions.

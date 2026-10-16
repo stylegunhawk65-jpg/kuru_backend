@@ -10,6 +10,18 @@ from app.schemas.github import (
     GitHubRepoListResponse,
     GitHubRepoSelectRequest,
 )
+from app.schemas.intelligence import (
+    CareerPathCompareRequest,
+    CareerPathCompareResponse,
+    CareerPathItem,
+    MatchedSkillItem,
+    MissingSkillItem,
+    PrioritizedGapItem,
+    SkillGapReportResponse,
+    SkillRecommendationItem,
+    WhatIfSimulationRequest,
+    WhatIfSimulationResponse,
+)
 from app.schemas.job import (
     JobListResponse,
     JobPostingResponse,
@@ -60,4 +72,14 @@ __all__ = [
     "SavedJobResponse",
     "JobSourceStatusResponse",
     "SyncTriggerResponse",
+    "MatchedSkillItem",
+    "MissingSkillItem",
+    "PrioritizedGapItem",
+    "SkillRecommendationItem",
+    "SkillGapReportResponse",
+    "CareerPathItem",
+    "CareerPathCompareRequest",
+    "CareerPathCompareResponse",
+    "WhatIfSimulationRequest",
+    "WhatIfSimulationResponse",
 ]
