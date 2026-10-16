@@ -41,6 +41,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "Database connectivity verified (latency: %sms)",
             db_status.get("latency_ms"),
         )
+        try:
+            import app.models
+            from app.db.base import Base
+            from app.db.session import engine, async_session_factory
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database schema verified and tables ready.")
+
+            # Auto-seed curated Indian tech jobs if empty
+            from app.models.job import JobPosting
+            from app.services.job_sources.aggregator import job_source_manager
+            from sqlalchemy import select, func
+            async with async_session_factory() as session:
+                count_stmt = select(func.count()).select_from(JobPosting)
+                count = (await session.execute(count_stmt)).scalar() or 0
+                if count == 0:
+                    logger.info("Job listings table is empty; syncing curated India jobs...")
+                    await job_source_manager.ensure_job_sources_registered(session)
+                    await job_source_manager.sync_source(session, "curated_india")
+                    logger.info("Curated India jobs synced successfully.")
+        except Exception as exc:
+            logger.warning("Error during table initialization or job seeding: %s", exc)
     else:
         logger.warning(
             "Database is unreachable on startup: %s. Continuing in degraded mode.",
