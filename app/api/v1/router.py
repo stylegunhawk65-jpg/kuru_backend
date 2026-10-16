@@ -1,10 +1,11 @@
 """API v1 router registry."""
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import github, health, profiles, skills
+from app.api.v1.endpoints import github, health, jobs, profiles, skills
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
 api_router.include_router(profiles.router, prefix="/profiles", tags=["Profiles"])
 api_router.include_router(github.router, prefix="/github", tags=["GitHub"])
 api_router.include_router(skills.router, prefix="/skills", tags=["Skills"])
+api_router.include_router(jobs.router, prefix="/jobs", tags=["Jobs"])

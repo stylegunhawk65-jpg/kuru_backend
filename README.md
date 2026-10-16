@@ -49,6 +49,27 @@ The platform provides student career profiling, live verified job and internship
   - Skips files exceeding 500 KB to protect system memory.
   - Transient 5xx retries with backoff.
 
+### Phase 4: Job & Internship Discovery with Transparent Baseline Matching
+- **Legitimate & Accessible Sources (Prioritizing India)**:
+  - **Curated Indian Tech Adapter (`curated_india`)**: Bundles verified technology opportunities and internships (Zerodha, Razorpay, Swiggy, CRED, Postman, Hasura, Juspay, Flipkart, TCS, Infosys) across Indian tech hubs (Bengaluru, Hyderabad, Pune, Mumbai, Remote) with verifiable careers links.
+  - **Arbeitnow Adapter (`arbeitnow`)**: Free, open public tech job board API with rate limiting and network failure tolerance.
+  - **Adzuna India Adapter (`adzuna`)**: Connects to Adzuna India endpoint when credentials (`ADZUNA_APP_ID`, `ADZUNA_APP_KEY`) are present; extracts tech skills and salary ranges.
+  - **Terms-of-Service Compliance (Unstop & Naukri)**: Automated scraping and bypassing bot protections are prohibited. Formal enterprise connectors (`UnstopPartnerAdapter`, `NaukriPartnerAdapter`) activate only when official partner keys are supplied.
+- **Deduplication & Freshness Tracking**:
+  - Deterministic SHA-256 deduplication hashing across normalized `company|title|location`. Duplicate listings update `last_seen_at` and `is_active` without redundant row duplication.
+- **Transparent Rule-Based Matching (Zero LLMs / Black Boxes)**:
+  - Explainable, deterministic alignment score (0.0 - 100.0) evaluated against `StudentProfile` and Phase 3 `StudentSkill` table:
+    - **Evidence-Backed Skills (50% max)**: Weighted sum of matched skill confidence scores from code analysis; lists matched and missing skills.
+    - **Target Role Alignment (25% max)**: Title and role overlap analysis.
+    - **Location Alignment (15% max)**: Matched against preferred locations and remote preference.
+    - **Career Interests Alignment (10% max)**: Description matching against student interests.
+  - Outputs transparent, human-readable arithmetic `match_reasons` for every score calculation.
+- **Authenticated REST Endpoints (`/api/v1/jobs`)**:
+  - Search and filter jobs with keyword search, location, job type, skill, and minimum match threshold.
+  - Individual job detail with complete match reasons.
+  - User-isolated bookmarking (`POST /{job_id}/save`, `DELETE /{job_id}/save`, `GET /saved`, `PATCH /saved/{job_id}`).
+  - Provider health and sync monitoring (`GET /sources/status`, `POST /sources/sync`).
+
 ---
 
 ## 📂 Project Structure
@@ -66,7 +87,8 @@ kuru_backend/
 │   ├── script.py.mako        # Migration revision script template
 │   └── versions/             # Database migration versions
 │       ├── 001_create_student_profiles_table.py
-│       └── 002_create_github_and_skill_tables.py
+│       ├── 002_create_github_and_skill_tables.py
+│       └── 003_create_job_and_source_tables.py
 ├── app/
 │   ├── __init__.py           # Application package marker
 │   ├── main.py               # FastAPI application factory, lifespan, CORS, and root routes
@@ -84,17 +106,28 @@ kuru_backend/
 │   ├── models/
 │   │   ├── __init__.py       # Database models registry
 │   │   ├── github.py         # GithubConnection, GithubRepository, RepositoryAnalysis models
+│   │   ├── job.py            # JobPosting, JobSource, SavedJob models
 │   │   ├── profile.py        # StudentProfile model
 │   │   └── skill.py          # StudentSkill and SkillGraphEdge models
 │   ├── schemas/
 │   │   ├── __init__.py       # Pydantic validation schemas registry
 │   │   ├── github.py         # GitHub connection, repo selection, and analysis schemas
+│   │   ├── job.py            # Job listings, match breakdown, and saved jobs schemas
 │   │   ├── profile.py        # StudentProfile request/response schemas
 │   │   └── skill.py          # Extracted skills and skill graph schemas
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── analyzer.py       # Static manifest & AST parser, skill taxonomy, and graph builder
-│   │   └── github_client.py  # Asynchronous GitHub API client with rate-limiting & retries
+│   │   ├── github_client.py  # Asynchronous GitHub API client with rate-limiting & retries
+│   │   ├── matcher.py        # Transparent rule-based skill and profile job matching engine
+│   │   └── job_sources/      # Modular job source adapters & aggregator
+│   │       ├── __init__.py
+│   │       ├── base.py       # NormalizedJob dataclass & BaseJobAdapter ABC
+│   │       ├── curated_india.py # Curated Indian tech listings with verifiable career links
+│   │       ├── arbeitnow.py  # Arbeitnow open public API adapter
+│   │       ├── adzuna.py     # Adzuna India REST API adapter
+│   │       ├── partner.py    # Compliant Unstop & Naukri enterprise partner adapters
+│   │       └── aggregator.py # JobSourceManager orchestrator, deduplication, and sync
 │   └── api/
 │       ├── __init__.py
 │       └── v1/
@@ -104,6 +137,7 @@ kuru_backend/
 │               ├── __init__.py
 │               ├── github.py   # GitHub connect, repos, analyze, and results endpoints
 │               ├── health.py   # GET /api/v1/health endpoint
+│               ├── jobs.py     # Authenticated job search, ranking, saving, and sync endpoints
 │               ├── profiles.py # Authenticated student career profile CRUD endpoints
 │               └── skills.py   # Extracted skills and knowledge graph endpoints
 └── tests/
@@ -117,6 +151,8 @@ kuru_backend/
     ├── test_github_api.py    # GitHub connect, analyze, skills, graph, and isolation tests
     ├── test_github_client.py # GitHub client rate-limiting, timeout, and retry tests
     ├── test_health.py        # Health and root discovery endpoint tests
+    ├── test_job_sources.py   # Adapters, normalization, deduplication, and sync tests
+    ├── test_jobs.py          # Job search, transparent ranking, saved jobs, and isolation tests
     └── test_profiles.py      # Student profile CRUD and cross-user isolation tests
 ```
 
@@ -130,6 +166,7 @@ kuru_backend/
 - **PostgreSQL**: Version 15 or higher (recommended for local development).
 - **Firebase Project**: A Firebase project with Firebase Authentication enabled.
 - **GitHub Account / OAuth App**: Personal Access Token (PAT) with `repo` scope or registered GitHub OAuth App.
+- **Job Partner Credentials (Optional)**: Adzuna App ID/Key, Unstop or Naukri partner API keys.
 
 ### 1. Clone & Navigate
 
@@ -203,9 +240,11 @@ LOG_LEVEL="INFO"
 # Encryption Key for GitHub Access Tokens at Rest
 ENCRYPTION_KEY="kuru_dev_secret_key_32_bytes_safe_fallback_123="
 
-# GitHub OAuth App Configuration (Optional)
-# GITHUB_CLIENT_ID="your_github_client_id"
-# GITHUB_CLIENT_SECRET="your_github_client_secret"
+# Optional Partner Job Source Credentials
+# ADZUNA_APP_ID="your_adzuna_app_id"
+# ADZUNA_APP_KEY="your_adzuna_app_key"
+# UNSTOP_API_KEY="your_unstop_api_key"
+# NAUKRI_API_KEY="your_naukri_api_key"
 ```
 
 > **Security Note**: Never commit your real `.env` file, database passwords, or service credentials to git. The `.gitignore` file is preconfigured to prevent this.
@@ -225,6 +264,8 @@ alembic upgrade head
 ```bash
 alembic history
 ```
+
+> **Note on Persistent Storage**: PostgreSQL is the primary production database. During local testing and environment bootstrapping without a running local PostgreSQL instance, the automated test suite uses asynchronous SQLite in-memory databases with complete schema parity.
 
 ---
 
@@ -247,6 +288,19 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ## 📡 API Endpoints Overview
 
 All protected endpoints require `Authorization: Bearer <FIREBASE_ID_TOKEN>`.
+
+### Job Discovery & Matching Endpoints (`/api/v1/jobs`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/jobs` | Search, filter, and rank jobs by transparent skill/profile match score |
+| `GET` | `/api/v1/jobs/{job_id}` | Detailed posting view with complete arithmetic match breakdown |
+| `POST` | `/api/v1/jobs/{job_id}/save` | Bookmark a job posting with personal notes and status |
+| `DELETE` | `/api/v1/jobs/{job_id}/save` | Remove bookmark on a job posting |
+| `GET` | `/api/v1/jobs/saved` | List user's bookmarked jobs (isolated to authenticated user) |
+| `PATCH` | `/api/v1/jobs/saved/{job_id}` | Update application status (`saved`, `applied`, `archived`) or notes |
+| `GET` | `/api/v1/jobs/sources/status` | Retrieve health, sync status, and count for all adapters |
+| `POST` | `/api/v1/jobs/sources/sync` | Trigger synchronization for all or a specific provider |
 
 ### GitHub & Codebase Analysis Endpoints (`/api/v1/github`)
 
@@ -298,3 +352,4 @@ pytest -v
 4. **Per-User Data Isolation**: Database queries strictly filter by `firebase_uid == current_user.uid`.
 5. **No Sensitive Leaks**: Exception handlers scrub internal Python exceptions and stack traces in non-debug mode.
 6. **Log Sanitization**: Bearer tokens, passwords, database strings, and connection credentials are scrubbed by `SensitiveDataFilter`.
+7. **Terms of Service Compliance**: In compliance with platform terms, job discovery relies exclusively on permitted open APIs and verified partner connections; unauthenticated scraping and bot protection bypasses are strictly prohibited.

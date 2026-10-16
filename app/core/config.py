@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str | None = None
     GITHUB_CLIENT_SECRET: str | None = None
 
+    # Job & Internship Data Sources (Optional credentials for partner APIs)
+    ADZUNA_APP_ID: str | None = None
+    ADZUNA_APP_KEY: str | None = None
+    UNSTOP_API_KEY: str | None = None
+    NAUKRI_API_KEY: str | None = None
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Any) -> str:

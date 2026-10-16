@@ -10,6 +10,16 @@ from app.schemas.github import (
     GitHubRepoListResponse,
     GitHubRepoSelectRequest,
 )
+from app.schemas.job import (
+    JobListResponse,
+    JobPostingResponse,
+    JobPostingWithMatchResponse,
+    JobSourceStatusResponse,
+    SavedJobCreate,
+    SavedJobResponse,
+    SavedJobUpdate,
+    SyncTriggerResponse,
+)
 from app.schemas.profile import (
     EducationEntry,
     StudentProfileCreate,
@@ -42,4 +52,12 @@ __all__ = [
     "SkillGraphNode",
     "SkillGraphEdgeResponse",
     "SkillGraphResponse",
+    "JobPostingResponse",
+    "JobPostingWithMatchResponse",
+    "JobListResponse",
+    "SavedJobCreate",
+    "SavedJobUpdate",
+    "SavedJobResponse",
+    "JobSourceStatusResponse",
+    "SyncTriggerResponse",
 ]
