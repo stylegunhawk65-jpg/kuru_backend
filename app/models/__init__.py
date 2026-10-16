@@ -4,6 +4,7 @@ from app.models.intelligence import CareerAssessment
 from app.models.job import JobPosting, JobSource, SavedJob
 from app.models.profile import StudentProfile
 from app.models.skill import SkillGraphEdge, StudentSkill
+from app.models.skillproof import SkillProofEvidence, SkillProofRun
 
 __all__ = [
     "StudentProfile",
@@ -18,4 +19,7 @@ __all__ = [
     "CareerAssessment",
     "AgentApprovalRequest",
     "AgentWorkflowRun",
+    "SkillProofRun",
+    "SkillProofEvidence",
 ]
+

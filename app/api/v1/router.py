@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     jobs,
     llm,
     profiles,
+    skillproof,
     skills,
 )
 
@@ -23,4 +24,6 @@ api_router.include_router(intelligence.router, prefix="/intelligence", tags=["In
 api_router.include_router(llm.router, prefix="/ai", tags=["AI & Career Twin Tasks"])
 api_router.include_router(agents.router, prefix="/agents", tags=["Agents"])
 api_router.include_router(firestore_sync.router, prefix="/sync", tags=["Firestore Sync"])
+api_router.include_router(skillproof.router, prefix="/skillproof", tags=["SkillProof Engine"])
+
 

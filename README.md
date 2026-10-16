@@ -644,6 +644,59 @@ To configure Firebase for the Kuru system:
 
 ---
 
+### Phase 8: SkillProof Engine — Evidence-Backed Skill Proof & Honest Similarity Verification
+
+The **SkillProof Engine** provides granular code-level skill verification, mapping detected skills to concrete source code implementations, and evaluating similarity against legitimate canonical reference sources.
+
+#### 1. Repository & Skill Selection
+- **Repository Listing**: Lists user repositories connected via least-privilege GitHub OAuth tokens with tracking status and prior SkillProof run counts (`GET /api/v1/skillproof/repos`).
+- **Granular Skill Detection**: Differentiates dependency declarations from concrete source code implementations (`GET /api/v1/skillproof/repos/{repo_id}/skills`).
+  - **Dependency Evidence**: Found in project manifests (`requirements.txt`, `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`).
+  - **Implementation Evidence**: Detected via safe AST parsing and lexical inspection in source files (`.py`, `.js`, `.ts`, `.go`, `Dockerfile`).
+  - **Classification**: Distinguishes skills as `implemented` (both dependency and source code), `dependency_only` (in manifests but never used), or `implementation_only`.
+- **Targeted vs Full-Repository Analysis**:
+  - Authenticated students can select specific skills for focused proof (`selected_skills: ["FastAPI", "SQLAlchemy"]`).
+  - If no skills are selected, the engine executes full-repository analysis across all detected skills.
+  - Never claims evidence that was not found in the codebase.
+
+#### 2. Skill-to-Code Mapping
+- Maps each selected skill to source files, line spans, and code snippets.
+- **Overlapping Skills Support**: A single file or route handler utilizing multiple frameworks (e.g. FastAPI + Pydantic + SQLAlchemy) is accurately mapped to all participating skills.
+- **Irrelevant File Filtering**: Automatically filters out binaries, lockfiles, node_modules, virtual environments, build artifacts, and vendor directories.
+
+#### 3. Multi-Modal Code Similarity Engine
+Compares candidate source code sections against a curated registry of legitimate reference sources with clear provenance:
+1. **Exact Matching**: Identifies verbatim block matching against reference corpora.
+2. **Normalized Matching**: Strips comments, collapses whitespace, and calculates `SequenceMatcher` ratio and coverage.
+3. **Token-Based Matching**: Computes token n-gram Jaccard similarity across lexical token streams.
+4. **Structural AST-Based Matching**: Safe Python AST normalization that anonymizes variable and function identifiers while preserving syntactic tree structure.
+5. **Reference Provenance**: Every similarity match reports source provenance, canonical documentation URL, license, matched snippets, and coverage.
+
+#### 4. Honest Reporting Guarantees
+- **No Plagiarism or AI-Generation Claims**: The engine explicitly sets `plagiarism_claim: false` and `ai_generation_claim: false` in every output.
+- **Boilerplate Realism**: Emphasizes that high similarity to canonical starter templates and documentation examples is normal in software development and does not indicate copying or lack of understanding.
+- **Eligibility Protection**: Similarity alone must never determine student competency or job application eligibility.
+- **Explicit Missing References**: If a skill has no reference corpus in the registry, the report explicitly notes `missing_references` rather than claiming 0% similarity as original work.
+
+#### 5. Database Schema & Persistence
+- **Migrations**: `006_create_skillproof_tables.py` (Alembic)
+- **Tables**:
+  - `skillproof_runs`: Stores run metadata, target skills, summary metrics, honest reporting metadata, and completion timestamps.
+  - `skillproof_evidence`: Stores file-level evidence, line spans, detected skills, and similarity findings.
+- **User Isolation**: Strictly isolated by `firebase_uid == current_user.uid`.
+
+#### 6. API Endpoints (`/api/v1/skillproof`)
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/repos` | List connected repositories with SkillProof run counts |
+| `GET` | `/repos/{repo_id}/skills` | Detect repository skills, distinguishing dependencies from implementations |
+| `POST` | `/analyze` | Trigger targeted or full-repository SkillProof analysis |
+| `GET` | `/runs` | List user's historical SkillProof analysis runs |
+| `GET` | `/runs/{run_id}` | Retrieve comprehensive SkillProof report with evidence and honest reporting |
+| `DELETE` | `/runs/{run_id}` | Delete a SkillProof run and its associated evidence |
+
+---
+
 ## 🔒 Security & Operational Principles
 
 1. **Zero Untrusted Code Execution**: All repository analysis uses static AST parsing and manifest inspection. Untrusted code is never run in `eval`, `exec`, or shell processes.
@@ -659,4 +712,6 @@ To configure Firebase for the Kuru system:
 11. **Never Let an LLM Approve Itself (Human-in-the-Loop)**: Any consequential actions (applications, profile updates, external exports) must pass through the `approval_workflow_agent` and remain `pending` until explicit cryptographic approval by the authenticated human user.
 12. **Zero Hallucinated URLs & Genuine Resource Verification**: The `resource_research_agent` strictly queries verified registries and enforces cryptographic HTTPS whitelist checks, guaranteeing zero invented links.
 13. **Observability Integrity**: LangSmith tracing strictly preserves privacy, masks secrets, and never fakes successful traces when credentials are missing.
+14. **Honest SkillProof & Similarity Integrity**: Similarity scores indicate syntactic, structural, or lexical overlap with canonical patterns. High similarity to reference boilerplate is normal and expected; similarity alone must never be used to judge student competency, claim plagiarism, or assert AI generation. Missing reference coverage is explicitly reported.
+
 
