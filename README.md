@@ -554,6 +554,44 @@ python scripts/train_qlora.py --smoke-test --output-dir checkpoints/qlora_smoke_
 - **Generation Timeouts**: Increase `LLM_TIMEOUT_SECONDS=180.0` in `.env` if generating large roadmaps on battery power or lower-wattage laptop profiles.
 - **Test Mode Decoupling**: Setting `LLM_PROVIDER="mock"` allows CI/CD and unit testing without downloading model weights or requiring a GPU. `LLMProviderFactory` strictly rejects `mock` provider in production environments.
 
+### Phase 7.1: LangSmith Observability, Firebase Auth, and Flutter Integration
+
+#### 1. Official LangSmith Tracing & Observability
+- **Dedicated Project**: Configured for project `kuru-career-twin` targeting official LangSmith tracing.
+- **Trace Scope**: Automatically traces all 9 logical agents, StateGraph nodes, local Qwen LLM calls, retries, node failures, and human approval pauses.
+- **Safe Startup Diagnostics**:
+  - `GET /api/v1/health/observability`: Returns diagnostic status (`connected`, `unconfigured`, `invalid_key`, `disabled`) with masked API keys (`lsv2_pt_...****`).
+  - Zero Fake Tracing: If the API key is missing or invalid, explicitly returns setup guidance rather than faking trace dispatch.
+  - Privacy First: Bearer tokens, passwords, and sensitive student PII are masked by `SensitiveDataFilter` and omitted from LangSmith metadata.
+- **Smoke Test Tool**:
+  ```bash
+  python scripts/verify_langsmith.py
+  ```
+  Validates environment configuration, tests LangSmith API connectivity, and runs an end-to-end multi-agent workflow trace.
+
+#### 2. Firebase Authentication
+- **Backend Admin SDK**: Initialized via service account certificate (`invest-887ce`) with cryptographic verification of ID tokens.
+- **Token Claims**: User identities are derived strictly from token claims (`uid`). Unauthenticated requests are rejected with 401.
+
+#### 3. Flutter Mobile Frontend (`kuru_app`)
+- **Structure**: Modern Flutter client located in `kuru_app/` connecting to the FastAPI backend.
+- **Dynamic API Base URLs**:
+  - Android Emulator: `http://10.0.2.2:8000/api/v1`
+  - Web & Desktop: `http://127.0.0.1:8000/api/v1`
+  - Physical Devices: Configurable at runtime via Login & Profile screens.
+- **Core Screens & Capabilities**:
+  1. **Career Twin Screen**: Interactive runner for the 9-agent LangGraph pipeline with live agent step timeline, generated weekly milestone roadmaps, recommended projects, and verified resources.
+  2. **Jobs & Internships Screen**: Search, filter by work mode (remote/hybrid/on-site), view transparent match percentages, matched skills (green), missing skills (amber), and bookmark jobs.
+  3. **Skill Gaps & Simulator Screen**: Evidence-backed codebase skills, prioritized market gaps, and an interactive What-If Simulator projecting score lifts and newly unlocked jobs.
+  4. **Approvals Screen**: Human-in-the-loop decision gate allowing students to inspect, approve, or reject consequential agent actions with feedback.
+  5. **Profile & Settings Screen**: Student profile management, GitHub connection & analysis trigger, system observability diagnostics, and sign-out.
+- **Testing & Verification**:
+  ```bash
+  cd kuru_app
+  flutter analyze
+  flutter test
+  ```
+
 ---
 
 ## 🔒 Security & Operational Principles
@@ -570,4 +608,5 @@ python scripts/train_qlora.py --smoke-test --output-dir checkpoints/qlora_smoke_
 10. **Privacy-Preserving AI & Consent-Gated Training**: Model weights are excluded from Git repositories and never downloaded during API startup. Training on private student/user data without explicit consent is strictly prohibited.
 11. **Never Let an LLM Approve Itself (Human-in-the-Loop)**: Any consequential actions (applications, profile updates, external exports) must pass through the `approval_workflow_agent` and remain `pending` until explicit cryptographic approval by the authenticated human user.
 12. **Zero Hallucinated URLs & Genuine Resource Verification**: The `resource_research_agent` strictly queries verified registries and enforces cryptographic HTTPS whitelist checks, guaranteeing zero invented links.
+13. **Observability Integrity**: LangSmith tracing strictly preserves privacy, masks secrets, and never fakes successful traces when credentials are missing.
 

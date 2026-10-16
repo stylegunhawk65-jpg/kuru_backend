@@ -49,3 +49,16 @@ async def get_health() -> HealthResponse:
         project_name=settings.PROJECT_NAME,
         database=DatabaseHealth(**db_health_data),
     )
+
+
+@router.get(
+    "/health/observability",
+    status_code=status.HTTP_200_OK,
+    summary="Observability & LangSmith Health Status",
+    description="Returns LangSmith tracing diagnostics, project configuration, and setup guidance without leaking secrets.",
+)
+async def get_observability_health(verify: bool = False):
+    """Check LangSmith tracing readiness and diagnostic status."""
+    from app.services.observability import get_langsmith_diagnostic
+    return get_langsmith_diagnostic(verify_connectivity=verify)
+

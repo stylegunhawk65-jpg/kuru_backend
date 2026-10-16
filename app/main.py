@@ -14,6 +14,8 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
 from app.db.session import check_db_connectivity, close_db_engine
 
+from app.services.observability import setup_langsmith_environment
+
 logger = logging.getLogger("kuru.main")
 
 
@@ -22,6 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan context manager for startup and shutdown events."""
     # Startup actions
     setup_logging(log_level=settings.LOG_LEVEL)
+    setup_langsmith_environment()
     logger.info(
         "Starting %s v%s [Environment: %s, Debug: %s]",
         settings.PROJECT_NAME,

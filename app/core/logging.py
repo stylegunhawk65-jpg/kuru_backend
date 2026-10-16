@@ -7,8 +7,9 @@ from typing import Any
 
 # Patterns to mask sensitive data in log strings
 SENSITIVE_PATTERNS = [
-    (re.compile(r'(password|passwd|secret|token|api[_-]?key|authorization|bearer)\s*[:=]\s*["\']?([^"\'\s,;]+)', re.IGNORECASE), r'\1: [REDACTED]'),
+    (re.compile(r'(password|passwd|secret|token|api[_-]?key|authorization|bearer|langsmith[_-]?api[_-]?key|langchain[_-]?api[_-]?key)\s*[:=]\s*["\']?([^"\'\s,;]+)', re.IGNORECASE), r'\1: [REDACTED]'),
     (re.compile(r'Bearer\s+[a-zA-Z0-9_\-\.]+', re.IGNORECASE), r'Bearer [REDACTED]'),
+    (re.compile(r'lsv2_[a-zA-Z0-9_]+', re.IGNORECASE), r'lsv2_***[REDACTED]***'),
     (re.compile(r'(postgres(?:ql)?(?:\+\w+)?://[^:]+:)([^@]+)(@)', re.IGNORECASE), r'\1****\3'),
 ]
 

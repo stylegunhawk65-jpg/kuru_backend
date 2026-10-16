@@ -51,8 +51,12 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # Firebase Authentication
-    FIREBASE_CREDENTIALS_PATH: str | None = None
-    FIREBASE_PROJECT_ID: str | None = None
+    FIREBASE_CREDENTIALS_PATH: str | None = (
+        "C:/Users/ADMIN/OneDrive/Desktop/firebase-secrets/invest-887ce-firebase-adminsdk-fbsvc-9baf4b4d75.json"
+        if __import__("os").path.isfile("C:/Users/ADMIN/OneDrive/Desktop/firebase-secrets/invest-887ce-firebase-adminsdk-fbsvc-9baf4b4d75.json")
+        else None
+    )
+    FIREBASE_PROJECT_ID: str | None = "invest-887ce"
 
     # Security & Encryption for External Tokens
     ENCRYPTION_KEY: str = "kuru_dev_secret_key_32_bytes_safe_fallback_123="
@@ -77,6 +81,12 @@ class Settings(BaseSettings):
     LLM_MAX_NEW_TOKENS: int = 1024
     LLM_TEMPERATURE: float = 0.7
 
+    # LangSmith Tracing & Observability (Phase 7.1)
+    LANGSMITH_TRACING: bool = False
+    LANGSMITH_API_KEY: str | None = None
+    LANGSMITH_PROJECT: str = "kuru-career-twin"
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Any) -> str:
@@ -88,6 +98,27 @@ class Settings(BaseSettings):
             if v.startswith("postgres://"):
                 return v.replace("postgres://", "postgresql+asyncpg://", 1)
         return str(v)
+
+    @field_validator("LANGSMITH_TRACING", mode="before")
+    @classmethod
+    def check_langchain_tracing_fallback(cls, v: Any) -> bool:
+        """Allow LANGCHAIN_TRACING_V2 as fallback for LANGSMITH_TRACING."""
+        if v is None or v is False:
+            import os
+            lc_val = os.environ.get("LANGCHAIN_TRACING_V2", "").lower()
+            return lc_val in ("true", "1", "yes")
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes")
+        return bool(v)
+
+    @field_validator("LANGSMITH_API_KEY", mode="before")
+    @classmethod
+    def check_langchain_api_key_fallback(cls, v: Any) -> str | None:
+        """Allow LANGCHAIN_API_KEY as fallback for LANGSMITH_API_KEY."""
+        if not v:
+            import os
+            return os.environ.get("LANGCHAIN_API_KEY")
+        return v
 
     @field_validator("CORS_ORIGINS")
     @classmethod

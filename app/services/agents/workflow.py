@@ -10,6 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.agent_workflow import AgentApprovalRequest, AgentWorkflowRun
 from app.schemas.agents import CareerTwinAgentState
 from app.services.agents.approval_agent import approval_workflow_agent
@@ -395,12 +396,25 @@ class CareerTwinWorkflowService:
             "errors": [],
         }
 
-        config = {
+        config: RunnableConfig = {
             "configurable": {
                 "thread_id": thread_id,
                 "db": db,
                 "provider": provider or get_llm_provider(),
-            }
+            },
+            "run_name": "kuru_full_career_twin_workflow",
+            "tags": [
+                "kuru-career-twin",
+                "full_career_twin",
+                settings.ENVIRONMENT,
+            ],
+            "metadata": {
+                "project": settings.LANGSMITH_PROJECT,
+                "workflow_type": "full_career_twin",
+                "thread_id": thread_id,
+                "run_id": run_id,
+                "target_role": target_role or "",
+            },
         }
 
         try:
@@ -481,12 +495,25 @@ class CareerTwinWorkflowService:
             "errors": [],
         }
 
-        config = {
+        config: RunnableConfig = {
             "configurable": {
                 "thread_id": thread_id,
                 "db": db,
                 "provider": provider or get_llm_provider(),
-            }
+            },
+            "run_name": "kuru_skill_roadmap_project_subworkflow",
+            "tags": [
+                "kuru-career-twin",
+                "skill_roadmap_project",
+                settings.ENVIRONMENT,
+            ],
+            "metadata": {
+                "project": settings.LANGSMITH_PROJECT,
+                "workflow_type": "skill_roadmap_project",
+                "thread_id": thread_id,
+                "run_id": run_id,
+                "target_role": target_role,
+            },
         }
 
         try:
