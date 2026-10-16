@@ -204,6 +204,25 @@ class MockLLMProvider(BaseLLMProvider):
             }
             return schema.model_validate(mock_data)
 
+        elif schema_name == "ChallengeGeneratedSchema":
+            mock_data = {
+                "title": "FastAPI: Request Header Token Validator",
+                "description": "Implement function `validate_auth_header(header: str) -> bool` that verifies Bearer token structure.",
+                "entry_function": "validate_auth_header",
+                "starter_code": "def validate_auth_header(header: str) -> bool:\n    # Implement here\n    pass\n",
+                "public_tests": [
+                    {"name": "test_valid_bearer", "args": ["Bearer valid_token_123"], "expected": True},
+                    {"name": "test_missing_bearer", "args": ["Basic user:pass"], "expected": False},
+                ],
+                "hidden_tests": [
+                    {"name": "test_empty_header", "args": [""], "expected": False},
+                    {"name": "test_malformed_space", "args": ["Bearer   "], "expected": False},
+                ],
+                "difficulty": "Intermediate",
+                "rubric": {"Correctness": 50, "Edge Cases": 30, "Cleanliness": 20},
+            }
+            return schema.model_validate(mock_data)
+
         # Fallback to generating a minimal valid instance of any generic schema
         try:
             return schema.model_validate({})

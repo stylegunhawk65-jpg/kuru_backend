@@ -96,6 +96,13 @@ def calculate_job_match(
             f"Skill match: {len(matched_skills)}/{len(required_skills)} required skills ({pct}%): "
             f"{', '.join(matched_skills) if matched_skills else 'None'} (+{accumulated_skill_score:.1f} pts)."
         )
+        demonstrated = [
+            s.skill_name for s in skills if getattr(s, "verification_status", None) == "practically_demonstrated"
+        ]
+        if demonstrated:
+            demo_matched = [m for m in matched_skills if any(d.lower() in m.lower() for d in demonstrated)]
+            if demo_matched:
+                match_reasons.append(f"Practically verified skills demonstrated in code assessment: {', '.join(demo_matched)}.")
         if missing_skills:
             match_reasons.append(f"Missing required skills for role: {', '.join(missing_skills)}.")
 

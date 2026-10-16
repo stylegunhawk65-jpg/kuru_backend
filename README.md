@@ -199,7 +199,10 @@ kuru_backend/
 │       ├── 001_create_student_profiles_table.py
 │       ├── 002_create_github_and_skill_tables.py
 │       ├── 003_create_job_and_source_tables.py
-│       └── 004_create_career_intelligence_tables.py
+│       ├── 004_create_career_intelligence_tables.py
+│       ├── 005_create_agent_workflow_and_approval_tables.py
+│       ├── 006_create_skillproof_tables.py
+│       └── 007_create_practical_assessment_tables.py
 ├── eval/
 │   └── career_twin_eval_dataset.json # Standardized benchmark prompts & evaluation criteria
 ├── scripts/
@@ -221,33 +224,44 @@ kuru_backend/
 │   │   └── session.py        # Async engine, sessionmaker, and connectivity verification
 │   ├── models/
 │   │   ├── __init__.py       # Database models registry
+│   │   ├── assessment.py     # PracticalAssessment & AssessmentSubmission models
 │   │   ├── github.py         # GithubConnection, GithubRepository, RepositoryAnalysis models
 │   │   ├── intelligence.py   # CareerAssessment model for persisted reports
 │   │   ├── job.py            # JobPosting, JobSource, SavedJob models
 │   │   ├── profile.py        # StudentProfile model
-│   │   └── skill.py          # StudentSkill and SkillGraphEdge models
+│   │   ├── skill.py          # StudentSkill (with verification_status) & SkillGraphEdge models
+│   │   └── skillproof.py     # SkillProofRun & SkillProofEvidence models
 │   ├── schemas/
 │   │   ├── __init__.py       # Pydantic validation schemas registry
+│   │   ├── assessment.py     # Practical assessment request/response & challenge schemas
 │   │   ├── github.py         # GitHub connection, repo selection, and analysis schemas
 │   │   ├── intelligence.py   # Skill gap, recommendation, compare, and what-if schemas
 │   │   ├── job.py            # Job listings, match breakdown, and saved jobs schemas
 │   │   ├── llm.py            # AI generation, resume tailor, roadmap, and benchmark schemas
 │   │   ├── profile.py        # StudentProfile request/response schemas
-│   │   └── skill.py          # Extracted skills and skill graph schemas
+│   │   ├── skill.py          # Extracted skills and skill graph schemas
+│   │   └── skillproof.py     # SkillProof request, analysis, and honest reporting schemas
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── analyzer.py       # Static manifest & AST parser, skill taxonomy, and graph builder
+│   │   ├── assessments/      # Practical assessment engine (sandbox, generator, evaluator)
+│   │   │   ├── __init__.py
+│   │   │   ├── evaluator.py  # Objective test scoring and 4-criterion rubric evaluation
+│   │   │   ├── generator.py  # Adaptive level selection and Qwen challenge generator
+│   │   │   ├── sandbox.py    # Subprocess execution sandbox with AST security scanner
+│   │   │   └── service.py    # Assessment lifecycle & Career Twin skill verification
 │   │   ├── career_intelligence.py # Explainable skill gap analysis, recommendations, and simulations
 │   │   ├── github_client.py  # Asynchronous GitHub API client with rate-limiting & retries
 │   │   ├── matcher.py        # Transparent rule-based skill and profile job matching engine
 │   │   ├── job_sources/      # Modular job source adapters & aggregator
-│   │   └── llm/              # LLM inference provider interface, factory, and task orchestrators
-│   │       ├── __init__.py
-│   │       ├── base.py       # BaseLLMProvider interface & robust JSON extractor
-│   │       ├── career_tasks.py # Career Twin task execution (resume, roadmap, interview)
-│   │       ├── factory.py    # LLMProviderFactory for local/mock switching
-│   │       ├── local_transformers.py # 4-bit quantized Qwen2.5 local inference on RTX 4050
-│   │       └── mock_provider.py # High-fidelity mock provider for rapid testing
+│   │   ├── llm/              # LLM inference provider interface, factory, and task orchestrators
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py       # BaseLLMProvider interface & robust JSON extractor
+│   │   │   ├── career_tasks.py # Career Twin task execution (resume, roadmap, interview)
+│   │   │   ├── factory.py    # LLMProviderFactory for local/mock switching
+│   │   │   ├── local_transformers.py # 4-bit quantized Qwen2.5 local inference on RTX 4050
+│   │   │   └── mock_provider.py # High-fidelity mock provider for rapid testing
+│   │   └── skillproof/       # SkillProof code-mapping and similarity engine
 │   └── api/
 │       ├── __init__.py
 │       └── v1/
@@ -255,17 +269,20 @@ kuru_backend/
 │           ├── router.py     # Aggregated v1 API router
 │           └── endpoints/
 │               ├── __init__.py
+│               ├── assessments.py  # Authenticated practical assessment endpoints
 │               ├── github.py       # GitHub connect, repos, analyze, and results endpoints
 │               ├── health.py       # GET /api/v1/health endpoint
 │               ├── intelligence.py # Skill gaps, recommendations, comparison, and what-if
 │               ├── jobs.py         # Authenticated job search, ranking, saving, and sync endpoints
 │               ├── llm.py          # AI resume tailoring, roadmap, interview, and benchmark endpoints
 │               ├── profiles.py     # Authenticated student career profile CRUD endpoints
-│               └── skills.py       # Extracted skills and knowledge graph endpoints
+│               ├── skills.py       # Extracted skills and knowledge graph endpoints
+│               └── skillproof.py   # Authenticated SkillProof analysis & reports endpoints
 └── tests/
     ├── __init__.py
     ├── conftest.py           # Pytest fixtures, test database engine, and async client
     ├── test_analyzer.py      # Static parser, AST extractor, and skill graph tests
+    ├── test_assessments.py   # Sandbox isolation, security scans, adaptive levels, API & skill promotion tests
     ├── test_auth.py          # Firebase authentication and token verification tests
     ├── test_config.py        # Configuration and sensitive data filter tests
     ├── test_database.py      # Database session and connectivity check tests
@@ -277,7 +294,8 @@ kuru_backend/
     ├── test_job_sources.py   # Adapters, normalization, deduplication, and sync tests
     ├── test_jobs.py          # Job search, transparent ranking, saved jobs, and isolation tests
     ├── test_llm.py           # LLM provider interface, structured output, and AI endpoint tests
-    └── test_profiles.py      # Student profile CRUD and cross-user isolation tests
+    ├── test_profiles.py      # Student profile CRUD and cross-user isolation tests
+    └── test_skillproof.py    # Multi-modal similarity, honest reporting, and repository proof tests
 ```
 
 ---
@@ -697,9 +715,83 @@ Compares candidate source code sections against a curated registry of legitimate
 
 ---
 
+### Phase 9: SkillProof Practical Assessment Engine — Isolated Execution & Adaptive Verification
+
+The **SkillProof Practical Assessment Engine** provides hands-on coding challenges to independently verify practical programming competency. It bridges repository static evidence and real job market requirements through an isolated, resource-constrained execution sandbox.
+
+#### 1. Adaptive Assessment Level Selection
+- **Honest Fairness Principle**: Similarity findings alone must never brand a student a cheater or prove AI generation.
+- **Adaptive Level Engine (`AdaptiveLevelSelector`)**:
+  - Automatically selects `basic`, `intermediate`, or `advanced` based on target job seniority, repository evidence confidence, and Phase 8 similarity patterns.
+  - **Constructive Validation**: If candidate code exhibits high similarity to standard template boilerplate, the engine adaptively assigns an **intermediate debugging** task, giving the student a constructive opportunity to demonstrate active comprehension and debugging mastery.
+- **Configurable Override**: Students or recruiters may explicitly specify a forced level (`basic`, `intermediate`, `advanced`).
+
+#### 2. Challenge Generation with Qwen2.5-3B-Instruct & Deterministic Fallbacks
+- **Structured Pydantic Generation**: Reuses the local `Qwen2.5-3B-Instruct` model through `BaseLLMProvider` using `ChallengeGeneratedSchema`.
+- **Bounded Retries**: Limits LLM generation attempts to 2 retries with strict schema validation.
+- **Deterministic Curated Templates (`CHALLENGE_TEMPLATES`)**: Guaranteed, high-quality fallback coding and debugging challenges with pre-compiled test cases for core tech stacks (FastAPI, Python).
+
+#### 3. Assessment Difficulty Levels
+| Level | Challenge Type | Characteristics |
+| :--- | :--- | :--- |
+| **Basic** | Foundational Coding | Short practical task focusing on core idioms, parameter sanitization, and public unit tests. |
+| **Intermediate** | Debugging & State Logic | Sliding-window logic, edge-case handling, and hidden boundary test cases. |
+| **Advanced** | Architectural Transfer | Multi-challenge scenarios, DAG dependency resolution, cycle detection, and hidden edge cases. |
+
+#### 4. Secure Subprocess Execution Sandbox
+- **Zero Untrusted Execution in FastAPI**: Student code is never run inside the web application process.
+- **Pre-Execution AST Security Gate (`StaticSecurityScanner`)**:
+  - Scans Python AST prior to execution.
+  - Strictly blocks forbidden modules and functions: `os`, `sys`, `subprocess`, `socket`, `shutil`, `ctypes`, `builtins`, `eval`, `exec`, `__import__`, `open`, etc.
+  - Rejects malicious or unsafe code immediately with status `security_violation` and zero CPU time spent in execution.
+- **Subprocess Isolation**:
+  - Runs in an ephemeral temporary directory (`tempfile.TemporaryDirectory(ignore_cleanup_errors=True)`).
+  - Invokes `python -B -I test_harness.py` (isolated mode stripping user site-packages, local environment, and bytecode caching).
+  - Strictly scrubbed environment variables: zero database URLs, zero Firebase secrets, zero LLM tokens.
+- **Resource & Timeout Limits**:
+  - Strict wall-clock execution timeout (default `3.0s`).
+  - Timeout enforcement forcefully terminates process via `proc.kill()` and cleans up process handles.
+  - Maximum stdout/stderr capture capped at 8 KB to prevent memory exhaustion.
+- **Safe Fallback**: If adequate sandbox isolation is unavailable or disabled via configuration (`SANDBOX_ENABLED=False`), execution is rejected with `execution_disabled` rather than using unsafe in-process fallbacks.
+
+#### 5. Objective Evaluation & Hidden Test Shielding
+- **Anti-Reverse-Engineering Shield**: Challenge retrieval endpoints (`GET /api/v1/assessments/{id}/challenge`) strictly strip `hidden_tests`.
+- **Predefined Objective Scoring**:
+  - Pass/fail status is determined strictly by deterministic unit test results, never by LLM sentiment alone.
+  - Requires **$\ge 70\%$ overall test pass score** and **$100\%$ public test pass rate**.
+- **Detailed 4-Criterion Rubric Breakdown**:
+  - Correctness ($40\%$), Edge Cases ($30\%$), Code Quality ($20\%$), Efficiency ($10\%$).
+
+#### 6. Career Twin Integration & Skill Verification Promotion
+- Passing an assessment promotes the corresponding `StudentSkill` record:
+  - Updates `verification_status` to `"practically_demonstrated"`.
+  - Boosts `confidence_score` to $\ge 0.90$.
+  - Appends verifiable proof metadata to `evidence` JSON.
+- **Job Matching Enhancement**: Transparent `JobMatcher` highlights practically demonstrated skills directly in job match explanations and recommendations.
+
+#### 7. Database Persistence & Alembic Migration
+- **Migration**: `007_create_practical_assessment_tables.py`
+- **Tables**:
+  - `practical_assessments`: Tracks skill, level, challenge specification, attempt counts (`max_attempts=3`), and assessment lifecycle (`created`, `in_progress`, `passed`, `failed`).
+  - `assessment_submissions`: Stores submitted code, execution status, pass/fail result, score, test tallies, duration, and rubric feedback.
+- **User Isolation**: Strictly isolated by `firebase_uid == current_user.uid`.
+
+#### 8. API Endpoints (`/api/v1/assessments`)
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/` | Create adaptive practical assessment for a skill |
+| `GET` | `/{id}/challenge` | Retrieve active challenge specification (hidden tests shielded) |
+| `POST` | `/{id}/submit` | Submit code solution for isolated sandbox execution and scoring |
+| `GET` | `/{id}/results` | Retrieve detailed assessment results, submission history, and rubric |
+| `POST` | `/{id}/reassess` | Request a fresh challenge reassessment if attempts remain |
+| `GET` | `/` | List all practical assessments for the authenticated student |
+| `DELETE` | `/{id}` | Delete an assessment and its associated submission history |
+
+---
+
 ## 🔒 Security & Operational Principles
 
-1. **Zero Untrusted Code Execution**: All repository analysis uses static AST parsing and manifest inspection. Untrusted code is never run in `eval`, `exec`, or shell processes.
+1. **Zero Untrusted Code Execution in Main Process**: All repository analysis uses static AST parsing and manifest inspection. Untrusted code is never run in `eval`, `exec`, or shell processes within the backend application.
 2. **Encrypted Access Tokens**: External GitHub tokens are encrypted at rest with Fernet symmetric encryption and never returned in API responses or written to logs.
 3. **Never Trust Client-Supplied User IDs**: User identities are extracted solely from verified Firebase ID token claims (`uid`).
 4. **Per-User Data Isolation**: Database queries strictly filter by `firebase_uid == current_user.uid`.
@@ -713,5 +805,6 @@ Compares candidate source code sections against a curated registry of legitimate
 12. **Zero Hallucinated URLs & Genuine Resource Verification**: The `resource_research_agent` strictly queries verified registries and enforces cryptographic HTTPS whitelist checks, guaranteeing zero invented links.
 13. **Observability Integrity**: LangSmith tracing strictly preserves privacy, masks secrets, and never fakes successful traces when credentials are missing.
 14. **Honest SkillProof & Similarity Integrity**: Similarity scores indicate syntactic, structural, or lexical overlap with canonical patterns. High similarity to reference boilerplate is normal and expected; similarity alone must never be used to judge student competency, claim plagiarism, or assert AI generation. Missing reference coverage is explicitly reported.
+15. **Sandbox Isolation & Fair Practical Assessment**: Untrusted code is strictly executed inside isolated subprocesses with pre-execution AST security filters, scrubbed environments, and hard timeouts. Hidden tests are structurally shielded from public view. Objective test scores govern pass/fail determinations ($\ge 70\%$). High template similarity triggers constructive debugging challenges rather than punitive accusations.
 
 

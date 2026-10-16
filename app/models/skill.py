@@ -40,6 +40,11 @@ class StudentSkill(Base, TimestampMixin):
         default=list,
         nullable=False,
     )
+    verification_status: Mapped[str] = mapped_column(
+        String(50),
+        default="repository_supported",
+        nullable=False,
+    )  # repository_supported, practically_demonstrated, not_yet_verified
 
 
 class SkillGraphEdge(Base, TimestampMixin):
