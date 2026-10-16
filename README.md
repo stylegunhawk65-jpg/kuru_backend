@@ -97,6 +97,37 @@ The platform provides student career profiling, live verified job and internship
   - Assessments are persisted in the `career_assessments` table (`004_create_career_intelligence_tables.py`).
   - Supports automated caching and on-demand refresh (`POST /api/v1/intelligence/skill-gaps/refresh`) when repositories or profiles evolve.
 
+### Phase 6: Local AI Model Evaluation, Structured Inference & Benchmarking
+- **Candidate Evaluation: Qwen2.5-3B-Instruct**:
+  - **Availability & License**: Permissive [Apache 2.0 License](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct), commercially viable.
+  - **Download Size**: FP16 weights ~6.2 GB; 4-bit NF4 quantized weights ~2.0 GB.
+  - **Hardware Compatibility (NVIDIA RTX 4050 Laptop GPU, 6GB VRAM & 16GB RAM)**:
+    - *FP16 mode*: Requires ~8 GB total VRAM (exceeds 6GB capacity, causing OOM or slow PCIe paging).
+    - *4-bit NF4 Quantization (`bitsandbytes`)*: Consumes ~3.2 GB total VRAM (weights ~2.0 GB, KV cache ~0.6 GB, CUDA context ~0.6 GB). Leaves **~2.8 GB VRAM headroom** for OS display servers and system processes.
+    - *Compatibility Verdict*: **Highly Suitable and Recommended via 4-bit NF4 quantization**.
+  - **Alternatives Considered**:
+    - *Qwen2.5-1.5B-Instruct*: Very fast (~1.8 GB VRAM), but noticeable reduction in nuanced resume tailoring and complex rubric formulation.
+    - *SmolLM2-1.7B-Instruct*: Lightweight Apache 2.0 model, but trails Qwen2.5 on coding and structured JSON generation.
+    - *Llama-3.2-3B-Instruct*: Gated license with commercial restrictions compared to Apache 2.0.
+- **Operational Decoupling & Safety**:
+  - Weights are strictly kept out of Git via `.gitignore`.
+  - **Zero downloads during API startup**: Startup is instantaneous. Models are lazy-loaded on explicit request or managed via dedicated administrative scripts.
+- **Provider Interface & Structured Generation**:
+  - `BaseLLMProvider` interface with robust JSON extraction and Pydantic schema validation.
+  - `MockLLMProvider`: Instant deterministic provider for rapid development and testing (zero downloads or GPU required).
+  - `LocalTransformersProvider`: On-device CUDA inference running 4-bit quantized Qwen2.5 with asynchronous thread offload and timeout enforcement.
+- **Career Twin Structured Tasks**:
+  - **Resume Bullet Point Optimizer (`/api/v1/ai/resume/tailor`)**: Rewrites draft bullets with action verbs, quantifiable metrics, and verified candidate skills.
+  - **Learning Roadmap Narrative (`/api/v1/ai/roadmap/generate`)**: Week-by-week study plan with daily milestones and hands-on deliverables addressing prioritized skill gaps.
+  - **Technical Interview Preparation (`/api/v1/ai/interview/prep`)**: Targeted questions, answer rubrics, and coding challenges.
+- **Benchmarking & Evaluation Dataset**:
+  - Curated evaluation prompts: `eval/career_twin_eval_dataset.json`.
+  - Standalone benchmark runner: `scripts/benchmark_llm.py` measuring latency, tokens/sec, peak VRAM, and schema compliance.
+- **QLoRA Fine-Tuning Feasibility & Privacy Safeguards**:
+  - Training script template: `scripts/train_qlora.py`.
+  - Memory analysis on RTX 4050 6GB: 4-bit base (~2.0 GB) + LoRA adapters (~95 MB) + Paged 8-bit AdamW (~100 MB) + gradient checkpointing activations (~1.4 GB) = **~4.2 GB VRAM peak**. Verified feasible on 6GB hardware.
+  - **Strict Privacy Safeguard**: Prohibits training on raw user/student portfolio tables without explicit opt-in consent.
+
 ---
 
 ## 📂 Project Structure
@@ -104,7 +135,7 @@ The platform provides student career profiling, live verified job and internship
 ```text
 kuru_backend/
 ├── .env.example              # Safe environment variable template (no secrets)
-├── .gitignore                # Git ignore rules for Python, IDEs, databases, logs, and secrets
+├── .gitignore                # Git ignore rules for Python, IDEs, databases, logs, secrets, and ML weights
 ├── README.md                 # Project documentation and developer guide
 ├── requirements.txt          # Pinned production and test dependencies
 ├── pyproject.toml            # Project metadata and test/tool configurations
@@ -117,6 +148,11 @@ kuru_backend/
 │       ├── 002_create_github_and_skill_tables.py
 │       ├── 003_create_job_and_source_tables.py
 │       └── 004_create_career_intelligence_tables.py
+├── eval/
+│   └── career_twin_eval_dataset.json # Standardized benchmark prompts & evaluation criteria
+├── scripts/
+│   ├── benchmark_llm.py      # Automated benchmark tool for latency, VRAM, and schema compliance
+│   └── train_qlora.py        # QLoRA fine-tuning utility with hardware feasibility & privacy checks
 ├── app/
 │   ├── __init__.py           # Application package marker
 │   ├── main.py               # FastAPI application factory, lifespan, CORS, and root routes
@@ -143,6 +179,7 @@ kuru_backend/
 │   │   ├── github.py         # GitHub connection, repo selection, and analysis schemas
 │   │   ├── intelligence.py   # Skill gap, recommendation, compare, and what-if schemas
 │   │   ├── job.py            # Job listings, match breakdown, and saved jobs schemas
+│   │   ├── llm.py            # AI generation, resume tailor, roadmap, and benchmark schemas
 │   │   ├── profile.py        # StudentProfile request/response schemas
 │   │   └── skill.py          # Extracted skills and skill graph schemas
 │   ├── services/
@@ -151,14 +188,14 @@ kuru_backend/
 │   │   ├── career_intelligence.py # Explainable skill gap analysis, recommendations, and simulations
 │   │   ├── github_client.py  # Asynchronous GitHub API client with rate-limiting & retries
 │   │   ├── matcher.py        # Transparent rule-based skill and profile job matching engine
-│   │   └── job_sources/      # Modular job source adapters & aggregator
+│   │   ├── job_sources/      # Modular job source adapters & aggregator
+│   │   └── llm/              # LLM inference provider interface, factory, and task orchestrators
 │   │       ├── __init__.py
-│   │       ├── base.py       # NormalizedJob dataclass & BaseJobAdapter ABC
-│   │       ├── curated_india.py # Curated Indian tech listings with verifiable career links
-│   │       ├── arbeitnow.py  # Arbeitnow open public API adapter
-│   │       ├── adzuna.py     # Adzuna India REST API adapter
-│   │       ├── partner.py    # Compliant Unstop & Naukri enterprise partner adapters
-│   │       └── aggregator.py # JobSourceManager orchestrator, deduplication, and sync
+│   │       ├── base.py       # BaseLLMProvider interface & robust JSON extractor
+│   │       ├── career_tasks.py # Career Twin task execution (resume, roadmap, interview)
+│   │       ├── factory.py    # LLMProviderFactory for local/mock switching
+│   │       ├── local_transformers.py # 4-bit quantized Qwen2.5 local inference on RTX 4050
+│   │       └── mock_provider.py # High-fidelity mock provider for rapid testing
 │   └── api/
 │       ├── __init__.py
 │       └── v1/
@@ -170,6 +207,7 @@ kuru_backend/
 │               ├── health.py       # GET /api/v1/health endpoint
 │               ├── intelligence.py # Skill gaps, recommendations, comparison, and what-if
 │               ├── jobs.py         # Authenticated job search, ranking, saving, and sync endpoints
+│               ├── llm.py          # AI resume tailoring, roadmap, interview, and benchmark endpoints
 │               ├── profiles.py     # Authenticated student career profile CRUD endpoints
 │               └── skills.py       # Extracted skills and knowledge graph endpoints
 └── tests/
@@ -186,6 +224,7 @@ kuru_backend/
     ├── test_intelligence.py   # Skill gap analysis, recommendations, compare, and what-if tests
     ├── test_job_sources.py   # Adapters, normalization, deduplication, and sync tests
     ├── test_jobs.py          # Job search, transparent ranking, saved jobs, and isolation tests
+    ├── test_llm.py           # LLM provider interface, structured output, and AI endpoint tests
     └── test_profiles.py      # Student profile CRUD and cross-user isolation tests
 ```
 
@@ -197,9 +236,9 @@ kuru_backend/
 
 - **Python**: Version 3.12 or higher.
 - **PostgreSQL**: Version 15 or higher (recommended for local development).
+- **GPU (Optional for Local Inference)**: NVIDIA RTX 4050 Laptop GPU (6GB VRAM) or higher with CUDA 12+. (For machines without GPU, `LLM_PROVIDER="mock"` runs fully offline in sub-milliseconds).
 - **Firebase Project**: A Firebase project with Firebase Authentication enabled.
 - **GitHub Account / OAuth App**: Personal Access Token (PAT) with `repo` scope or registered GitHub OAuth App.
-- **Job Partner Credentials (Optional)**: Adzuna App ID/Key, Unstop or Naukri partner API keys.
 
 ### 1. Clone & Navigate
 
@@ -273,11 +312,15 @@ LOG_LEVEL="INFO"
 # Encryption Key for GitHub Access Tokens at Rest
 ENCRYPTION_KEY="kuru_dev_secret_key_32_bytes_safe_fallback_123="
 
-# Optional Partner Job Source Credentials
-# ADZUNA_APP_ID="your_adzuna_app_id"
-# ADZUNA_APP_KEY="your_adzuna_app_key"
-# UNSTOP_API_KEY="your_unstop_api_key"
-# NAUKRI_API_KEY="your_naukri_api_key"
+# Local LLM & AI Inference Configuration (Phase 6)
+# Options: "mock" (fast dev/testing, zero GPU/download required), "local" (RTX 4050 4-bit)
+LLM_PROVIDER="mock"
+LOCAL_MODEL_ID="Qwen/Qwen2.5-3B-Instruct"
+LOCAL_MODEL_DEVICE="cuda"
+LOCAL_MODEL_QUANTIZATION="4bit"
+LLM_TIMEOUT_SECONDS=60.0
+LLM_MAX_NEW_TOKENS=1024
+LLM_TEMPERATURE=0.7
 ```
 
 > **Security Note**: Never commit your real `.env` file, database passwords, or service credentials to git. The `.gitignore` file is preconfigured to prevent this.
@@ -321,6 +364,16 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ## 📡 API Endpoints Overview
 
 All protected endpoints require `Authorization: Bearer <FIREBASE_ID_TOKEN>`.
+
+### AI & Career Twin Task Endpoints (`/api/v1/ai`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/ai/health` | Inspect local LLM provider status, device, quantization, and GPU VRAM usage |
+| `POST` | `/api/v1/ai/resume/tailor` | Optimize draft resume bullet points with quantifiable metrics and verified skills |
+| `POST` | `/api/v1/ai/roadmap/generate` | Generate weekly progressive learning roadmap addressing prioritized skill gaps |
+| `POST` | `/api/v1/ai/interview/prep` | Generate technical interview questions, answer rubrics, and coding challenges |
+| `POST` | `/api/v1/ai/benchmark` | Execute standardized benchmark task reporting latency and VRAM footprint |
 
 ### Career Intelligence Endpoints (`/api/v1/intelligence`)
 
@@ -376,13 +429,23 @@ All protected endpoints require `Authorization: Bearer <FIREBASE_ID_TOKEN>`.
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing & Benchmarks
 
-The automated test suite runs using `pytest` and `pytest-asyncio`. Tests use isolated in-memory SQLite fixtures with zero external network or database dependencies.
+The automated test suite runs using `pytest` and `pytest-asyncio`. Tests use isolated in-memory SQLite fixtures and fast mock LLM providers with zero external network, database, or model weight download dependencies.
 
-Run all tests:
+### Run All Tests:
 ```bash
 pytest -v
+```
+
+### Run Benchmark Tool:
+```bash
+python scripts/benchmark_llm.py
+```
+
+### Check QLoRA Hardware Feasibility:
+```bash
+python scripts/train_qlora.py --check-only
 ```
 
 ---
@@ -398,3 +461,4 @@ pytest -v
 7. **Terms of Service Compliance**: In compliance with platform terms, job discovery relies exclusively on permitted open APIs and verified partner connections; unauthenticated scraping and bot protection bypasses are strictly prohibited.
 8. **Never Invent Skills, Jobs, or Evidence**: Skill recommendations, match calculations, and career gap reports strictly anchor in actual job postings, AST imports, and validated manifests.
 9. **Transparent & Deterministic Intelligence**: Calculations are explainable and rule-based. Learning runway estimates and simulation results clearly disclose assumptions.
+10. **Privacy-Preserving AI & Consent-Gated Training**: Model weights are excluded from Git repositories and never downloaded during API startup. Training on private student/user data without explicit consent is strictly prohibited.

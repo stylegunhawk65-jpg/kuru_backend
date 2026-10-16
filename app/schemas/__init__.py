@@ -32,6 +32,19 @@ from app.schemas.job import (
     SavedJobUpdate,
     SyncTriggerResponse,
 )
+from app.schemas.llm import (
+    BenchmarkResultResponse,
+    BulletPointItem,
+    InterviewPrepRequest,
+    InterviewPrepResponse,
+    ModelHealthResponse,
+    ResumeTailorRequest,
+    ResumeTailorResponse,
+    RoadmapGenerateRequest,
+    RoadmapGenerateResponse,
+    RoadmapModuleItem,
+    TechnicalQuestionItem,
+)
 from app.schemas.profile import (
     EducationEntry,
     StudentProfileCreate,
@@ -82,4 +95,15 @@ __all__ = [
     "CareerPathCompareResponse",
     "WhatIfSimulationRequest",
     "WhatIfSimulationResponse",
+    "BulletPointItem",
+    "ResumeTailorRequest",
+    "ResumeTailorResponse",
+    "RoadmapModuleItem",
+    "RoadmapGenerateRequest",
+    "RoadmapGenerateResponse",
+    "TechnicalQuestionItem",
+    "InterviewPrepRequest",
+    "InterviewPrepResponse",
+    "ModelHealthResponse",
+    "BenchmarkResultResponse",
 ]

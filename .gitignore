@@ -79,3 +79,15 @@ cover/
 *~
 .DS_Store
 Thumbs.db
+
+# Machine Learning Model Weights, Checkpoints & Datasets (Phase 6)
+models/
+checkpoints/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.gguf
+*.onnx
+hf_cache/
+evaluation_results/

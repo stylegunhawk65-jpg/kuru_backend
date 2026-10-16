@@ -67,6 +67,16 @@ class Settings(BaseSettings):
     UNSTOP_API_KEY: str | None = None
     NAUKRI_API_KEY: str | None = None
 
+    # Local LLM & AI Inference Configuration (Phase 6)
+    LLM_PROVIDER: str = "mock"  # mock, local, openai_compatible
+    LOCAL_MODEL_ID: str = "Qwen/Qwen2.5-3B-Instruct"
+    LOCAL_MODEL_PATH: str | None = None
+    LOCAL_MODEL_DEVICE: str = "cuda"  # cuda, cpu
+    LOCAL_MODEL_QUANTIZATION: str = "4bit"  # 4bit, 8bit, none
+    LLM_TIMEOUT_SECONDS: float = 60.0
+    LLM_MAX_NEW_TOKENS: int = 1024
+    LLM_TEMPERATURE: float = 0.7
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Any) -> str:

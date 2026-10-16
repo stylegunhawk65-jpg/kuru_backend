@@ -1,0 +1,72 @@
+[
+  {
+    "id": "eval_resume_001",
+    "task": "resume_tailor",
+    "target_role": "Junior Backend Engineer",
+    "candidate_skills": ["Python", "FastAPI", "PostgreSQL", "Docker"],
+    "bullet_points": [
+      "Built APIs for user authentication.",
+      "Used Docker to run databases locally."
+    ],
+    "job_description": "Seeking a Backend Engineer skilled in Python and FastAPI to build high-scale RESTful microservices with PostgreSQL.",
+    "evaluation_criteria": {
+      "must_include_skills": ["Python", "FastAPI", "PostgreSQL"],
+      "must_not_include_hallucinations": ["Kubernetes", "AWS", "Java", "Go"],
+      "requires_quantifiable_metrics": true
+    }
+  },
+  {
+    "id": "eval_resume_002",
+    "task": "resume_tailor",
+    "target_role": "Full Stack Developer",
+    "candidate_skills": ["TypeScript", "React", "Node.js", "MongoDB"],
+    "bullet_points": [
+      "Created frontend components for student dashboard.",
+      "Wrote backend routes in Express."
+    ],
+    "job_description": "Full stack engineer responsible for responsive React UI and Node.js REST services.",
+    "evaluation_criteria": {
+      "must_include_skills": ["React", "TypeScript", "Node.js"],
+      "must_not_include_hallucinations": ["Angular", "Vue", "Python"],
+      "requires_quantifiable_metrics": true
+    }
+  },
+  {
+    "id": "eval_roadmap_001",
+    "task": "roadmap_generate",
+    "target_role": "Backend Engineer",
+    "focus_skills": ["Docker", "Redis", "Distributed Systems"],
+    "weekly_hours_available": 12,
+    "evaluation_criteria": {
+      "min_modules": 2,
+      "max_modules": 8,
+      "requires_daily_milestones": true,
+      "requires_practical_projects": true
+    }
+  },
+  {
+    "id": "eval_roadmap_002",
+    "task": "roadmap_generate",
+    "target_role": "Cloud DevOps Engineer",
+    "focus_skills": ["Kubernetes", "GitHub Actions", "Terraform"],
+    "weekly_hours_available": 15,
+    "evaluation_criteria": {
+      "min_modules": 2,
+      "max_modules": 8,
+      "requires_daily_milestones": true,
+      "requires_practical_projects": true
+    }
+  },
+  {
+    "id": "eval_interview_001",
+    "task": "interview_prep",
+    "target_role": "Backend Engineer",
+    "company_name": "Razorpay",
+    "focus_skills": ["Python", "PostgreSQL", "Redis", "FastAPI"],
+    "evaluation_criteria": {
+      "min_technical_questions": 2,
+      "must_have_expected_answer_points": true,
+      "must_have_coding_challenges": true
+    }
+  }
+]
