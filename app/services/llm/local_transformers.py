@@ -4,10 +4,10 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any
-import torch
-
-from app.core.config import settings
+try:
+    import torch
+except ImportError:
+    torch = None
 from app.services.llm.base import BaseLLMProvider, LLMInferenceError, LLMResponse
 
 logger = logging.getLogger("kuru.llm.local")

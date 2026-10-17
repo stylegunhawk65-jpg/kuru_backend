@@ -1,9 +1,9 @@
 """Provider factory and lifecycle manager for LLM services."""
 
 import logging
+import os
 from app.core.config import settings
 from app.services.llm.base import BaseLLMProvider
-from app.services.llm.local_transformers import LocalTransformersProvider
 from app.services.llm.mock_provider import MockLLMProvider
 
 logger = logging.getLogger("kuru.llm.factory")
@@ -19,7 +19,8 @@ class LLMProviderFactory:
         """Get or initialize the requested LLM provider."""
         target = (provider_name or settings.LLM_PROVIDER).lower().strip()
 
-        if settings.ENVIRONMENT == "production":
+        is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+        if settings.ENVIRONMENT == "production" and not is_serverless:
             if target == "mock":
                 raise ValueError(
                     "Mock LLM provider is strictly prohibited in production environment. "
@@ -34,6 +35,7 @@ class LLMProviderFactory:
         if target not in self._providers:
             if target == "local":
                 logger.info("Initializing LocalTransformersProvider for local model inference...")
+                from app.services.llm.local_transformers import LocalTransformersProvider
                 self._providers[target] = LocalTransformersProvider()
             elif target == "mock":
                 logger.info("Initializing MockLLMProvider (test/development mode)...")

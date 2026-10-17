@@ -69,14 +69,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             db_status.get("message"),
         )
 
-    # Start background scheduler unless running in testing environment
-    if settings.ENVIRONMENT != "testing":
+    # Start background scheduler unless running in testing environment or serverless runtime
+    import os
+    is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+    if settings.ENVIRONMENT != "testing" and not is_serverless:
         await notification_scheduler.start()
 
     yield
 
     # Shutdown actions
-    if settings.ENVIRONMENT != "testing":
+    if settings.ENVIRONMENT != "testing" and not is_serverless:
         await notification_scheduler.stop()
 
     logger.info("Shutting down %s", settings.PROJECT_NAME)

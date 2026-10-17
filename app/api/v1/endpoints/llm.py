@@ -4,10 +4,10 @@ import logging
 import time
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-import torch
-
-from app.core.auth import AuthenticatedUser, get_current_user
+try:
+    import torch
+except ImportError:
+    torch = None
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.intelligence import CareerAssessment
@@ -42,7 +42,8 @@ async def get_llm_health() -> ModelHealthResponse:
     vram_alloc = 0.0
     vram_res = 0.0
 
-    if torch.cuda.is_available():
+    cuda_avail = bool(torch and torch.cuda.is_available())
+    if cuda_avail and torch is not None:
         vram_alloc = round(torch.cuda.memory_allocated() / (1024 * 1024), 2)
         vram_res = round(torch.cuda.memory_reserved() / (1024 * 1024), 2)
 
@@ -52,7 +53,7 @@ async def get_llm_health() -> ModelHealthResponse:
         is_ready=provider.is_ready(),
         device=settings.LOCAL_MODEL_DEVICE,
         quantization=settings.LOCAL_MODEL_QUANTIZATION,
-        cuda_available=torch.cuda.is_available(),
+        cuda_available=cuda_avail,
         vram_allocated_mb=vram_alloc,
         vram_reserved_mb=vram_res,
     )

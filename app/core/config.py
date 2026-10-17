@@ -91,13 +91,18 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Any) -> str:
-        """Ensure postgresql connection uses the asyncpg driver."""
+        """Ensure postgresql connection uses the asyncpg driver, with serverless fallback."""
+        import os
+        is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
         if isinstance(v, str):
-            # Convert standard sync postgresql:// url to postgresql+asyncpg://
+            if is_serverless and ("localhost" in v or "127.0.0.1" in v):
+                return "sqlite+aiosqlite:////tmp/kuru_serverless.db"
             if v.startswith("postgresql://"):
                 return v.replace("postgresql://", "postgresql+asyncpg://", 1)
             if v.startswith("postgres://"):
                 return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif is_serverless:
+            return "sqlite+aiosqlite:////tmp/kuru_serverless.db"
         return str(v)
 
     @field_validator("LANGSMITH_TRACING", mode="before")
@@ -125,12 +130,13 @@ class Settings(BaseSettings):
     @classmethod
     def validate_cors_origins(cls, v: list[str], info: Any) -> list[str]:
         """Validate CORS origins for security in production."""
-        # Check environment if accessible from values
+        import os
         env = "development"
         if hasattr(info, "data") and "ENVIRONMENT" in info.data:
             env = info.data["ENVIRONMENT"]
 
-        if env == "production":
+        is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+        if env == "production" and not is_serverless:
             for origin in v:
                 if origin == "*":
                     raise ValueError(
