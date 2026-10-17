@@ -60,10 +60,21 @@ class GithubRepository(Base, TimestampMixin):
     stars_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     forks_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     selected_for_analysis: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    selected_skills: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=True)
     last_analyzed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
+
+    @property
+    def language(self) -> str | None:
+        """Alias for primary_language to satisfy schemas expecting language."""
+        return self.primary_language
+
+    @property
+    def stargazers_count(self) -> int:
+        """Alias for stars_count to satisfy schemas expecting stargazers_count."""
+        return self.stars_count
 
 
 class RepositoryAnalysis(Base, TimestampMixin):

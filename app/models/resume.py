@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 import uuid
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -82,3 +82,53 @@ class Resume(Base, TimestampMixin):
         default=False,
         nullable=False,
     )
+
+
+class BaseCV(Base, TimestampMixin):
+    """Uploaded user CV/resume document with parsed and confirmed structured data."""
+
+    __tablename__ = "base_cvs"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        index=True,
+    )
+    firebase_uid: Mapped[str] = mapped_column(
+        String(128),
+        index=True,
+        nullable=False,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(32), nullable=False)  # "pdf" or "docx"
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    extracted_data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    is_confirmed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    @property
+    def full_name(self) -> str | None:
+        return (self.extracted_data or {}).get("full_name")
+
+    @property
+    def email(self) -> str | None:
+        return (self.extracted_data or {}).get("email")
+
+    @property
+    def phone(self) -> str | None:
+        return (self.extracted_data or {}).get("phone")
+
+    @property
+    def skills(self) -> list:
+        return (self.extracted_data or {}).get("skills", [])
+
+    @property
+    def education(self) -> list:
+        return (self.extracted_data or {}).get("education", [])
+
+    @property
+    def experience(self) -> list:
+        return (self.extracted_data or {}).get("experience", [])
+

@@ -14,6 +14,7 @@ from app.core.auth import AuthenticatedUser, get_current_user
 from app.db.session import get_db
 from app.models.notification import Reminder
 from app.models.profile import StudentProfile
+from app.models.skill import StudentSkill
 from app.services.agents.resource_registry import resource_registry
 from app.services.career_intelligence import career_intelligence_service
 
@@ -300,51 +301,198 @@ async def get_growth_projects(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """Retrieve structured portfolio project recommendations."""
-    return [
+    """Retrieve structured portfolio project recommendations mapped strictly to identified skill gaps."""
+    # 1. Fetch user's verified skills
+    skills_stmt = select(StudentSkill).where(StudentSkill.firebase_uid == current_user.uid)
+    skills = (await db.execute(skills_stmt)).scalars().all()
+    verified_names = {
+        s.skill_name.strip().lower()
+        for s in skills
+        if s.verification_status in ("repository_supported", "practically_demonstrated")
+    }
+
+    # 2. Gap-driven project templates mapped to production competencies
+    gap_templates = [
         {
-            "id": "proj_1",
-            "title": "High-Throughput Telemetry Event Processor",
-            "description": "Architect a non-blocking ingestion service that collects real-time event telemetry, validates schemas via Pydantic v2, and queues background persistence.",
+            "gap": "Docker",
+            "aliases": ["docker", "container", "containers", "containerization"],
+            "title": "Production Containerization & Zero-Downtime Pipeline",
+            "description": "Containerize an existing multi-tier backend with multi-stage Docker builds, non-root runtime users, healthchecks, and compose orchestration.",
             "difficulty": "Intermediate",
             "estimated_weeks": "2 weeks",
-            "skills": ["FastAPI", "Python", "AsyncIO", "PostgreSQL"],
+            "skills": ["Docker", "Docker Compose", "Linux", "GitHub Actions"],
             "key_features": [
-                "Sub-50ms ingestion latency under 5,000 req/sec",
-                "Strict token validation and cryptographic signature verification",
-                "Automated AST-verified unit and integration test coverage",
+                "Multi-stage Dockerfile minimizing image size (< 120MB)",
+                "Docker Compose multi-service setup linking backend, database, and Redis cache",
+                "Automated CI smoke test verifying container startup and healthy endpoints",
             ],
-            "architecture": "FastAPI async gateway with connection pooling, structured logging, and transactional persistence.",
-            "deliverable": "Production-ready GitHub repo with Dockerfile, docker-compose.yml, and 100% test coverage.",
+            "milestones": [
+                "Draft baseline Dockerfile and prune unnecessary build layers",
+                "Create compose networking for isolated local microservice execution",
+                "Add GitHub Actions automated container linting and build validation",
+            ],
+            "validation_criteria": "Build and run container; verify health endpoint returns 200 within 5 seconds of startup.",
+            "deliverable": "GitHub repository with Dockerfile, docker-compose.yml, and automated CI test workflow.",
+            "gap_explanation": "Candidate portfolio lacks verified Dockerfile and container deployment evidence.",
         },
         {
-            "id": "proj_2",
+            "gap": "Redis",
+            "aliases": ["redis", "caching", "cache"],
             "title": "Distributed Cache & Idempotency Key Gateway",
-            "description": "Implement a distributed Redis caching layer with atomic token bucket rate limiting and idempotent request processing.",
+            "description": "Implement a high-throughput Redis caching layer with sliding-window rate limiting and idempotent HTTP request deduplication.",
             "difficulty": "Intermediate",
             "estimated_weeks": "2 weeks",
             "skills": ["Redis", "Python", "FastAPI", "Docker"],
             "key_features": [
-                "Sliding window rate-limiter with Redis Lua scripts",
-                "Idempotency-Key HTTP header validation preventing duplicate charges",
-                "Cache stampede protection via probabilistic early expiration",
+                "Atomic token-bucket rate limiter implemented via Redis Lua script",
+                "Idempotency-Key HTTP middleware preventing duplicate write transactions",
+                "Cache stampede mitigation using probabilistic early expiration",
             ],
-            "architecture": "Layered middleware interceptor with asynchronous Redis connection pool and fallback circuit breaker.",
-            "deliverable": "Modular Python library with comprehensive benchmark harness and Locust load tests.",
+            "milestones": [
+                "Establish async Redis connection pool with reconnection handling",
+                "Write sliding-window rate limiter middleware with unit tests",
+                "Benchmark cache throughput against raw database endpoints",
+            ],
+            "validation_criteria": "Achieve >85% cache hit ratio and sub-5ms latency under simulated burst traffic.",
+            "deliverable": "Reusable Python package with comprehensive test suite and benchmark harness.",
+            "gap_explanation": "Candidate portfolio lacks verified Redis caching and in-memory key-value store evidence.",
         },
         {
-            "id": "proj_3",
-            "title": "CI/CD Pipeline with Automated Code Quality Gates",
-            "description": "Construct a complete GitHub Actions delivery pipeline that enforces linting, type checks (mypy), security audits (bandit), and container security scanning.",
+            "gap": "PostgreSQL",
+            "aliases": ["postgresql", "postgres", "sql", "relational database"],
+            "title": "Relational Data Modeling & Async Connection Layer",
+            "description": "Architect a 3NF normalized relational persistence layer with asyncpg connection pooling, transactional boundaries, and Alembic migrations.",
+            "difficulty": "Intermediate",
+            "estimated_weeks": "2 weeks",
+            "skills": ["PostgreSQL", "SQLAlchemy", "Alembic", "Python"],
+            "key_features": [
+                "Declarative SQLAlchemy models with foreign key constraints and composite indexes",
+                "Alembic auto-generated schema version migrations with upgrade/downgrade safety",
+                "Connection pool configuration preventing exhaustion under concurrent queries",
+            ],
+            "milestones": [
+                "Design ER schema and define indexes on high-cardinality query columns",
+                "Implement database session dependency injection with rollback on error",
+                "Write stress tests validating pool behavior under 100 concurrent connections",
+            ],
+            "validation_criteria": "All migrations execute cleanly and rollback without data corruption; query latency p95 < 20ms.",
+            "deliverable": "Modular database layer with seed fixtures, migration scripts, and integration tests.",
+            "gap_explanation": "Candidate portfolio lacks evidence of relational database design and schema migrations.",
+        },
+        {
+            "gap": "Kubernetes",
+            "aliases": ["kubernetes", "k8s", "helm", "orchestration"],
+            "title": "Kubernetes Microservice Deployment with Ingress & HPA",
+            "description": "Construct production Kubernetes manifests including Deployments, Services, ConfigMaps, Secrets, Ingress routing, and Horizontal Pod Autoscalers.",
             "difficulty": "Advanced",
             "estimated_weeks": "3 weeks",
-            "skills": ["Docker", "GitHub Actions", "CI/CD", "Linux"],
+            "skills": ["Kubernetes", "Docker", "Helm", "Linux"],
             "key_features": [
-                "Multi-stage Docker builds with distroless runtime images",
-                "Automated vulnerability scanning with Trivy and Bandit",
-                "Strict coverage gates (>85%) before container publish",
+                "Zero-downtime rolling update strategy with readiness and liveness probes",
+                "Horizontal Pod Autoscaler dynamically scaling replicas based on CPU/memory pressure",
+                "Parameterized Helm chart supporting development, staging, and production environments",
             ],
-            "architecture": "Parallelized workflow jobs utilizing GitHub cache actions and artifact staging.",
-            "deliverable": "Reusable GitHub Actions workflow templates with documentation and sample service.",
+            "milestones": [
+                "Write base Deployment and ClusterIP Service manifests with resource limits",
+                "Configure Ingress controller and TLS termination annotations",
+                "Test horizontal pod autoscaling under simulated load generation",
+            ],
+            "validation_criteria": "Rolling deployments succeed with 0% downtime and HPA scales up replicas automatically under load.",
+            "deliverable": "Production-grade Helm chart repository with README documentation and verification instructions.",
+            "gap_explanation": "Candidate portfolio lacks cluster deployment and container orchestration evidence.",
+        },
+        {
+            "gap": "FastAPI",
+            "aliases": ["fastapi", "rest api", "async api"],
+            "title": "High-Throughput Asynchronous REST API Gateway",
+            "description": "Build an async REST microservice with Pydantic v2 data validation, structured error handling, JWT auth middleware, and automated OpenAPI documentation.",
+            "difficulty": "Intermediate",
+            "estimated_weeks": "2 weeks",
+            "skills": ["FastAPI", "Python", "Pydantic", "AsyncIO"],
+            "key_features": [
+                "Non-blocking asynchronous endpoint handlers with dependency injection",
+                "Strict Pydantic request/response schema validation with descriptive error payloads",
+                "Automated unit and integration test suite with pytest-asyncio and httpx",
+            ],
+            "milestones": [
+                "Structure project using modular domain-driven router layout",
+                "Implement centralized exception handlers and request logging middleware",
+                "Achieve >90% test coverage across all endpoint routes",
+            ],
+            "validation_criteria": "Handle 3,000 req/sec with sub-50ms latency and 100% test coverage.",
+            "deliverable": "Complete FastAPI application with full test suite, documentation, and mock dataset.",
+            "gap_explanation": "Candidate portfolio lacks verified asynchronous REST API implementation evidence.",
         },
     ]
+
+    # 3. Prioritize projects addressing actual missing skills
+    recommended = []
+    seen_gaps = set()
+
+    for tmpl in gap_templates:
+        is_missing = not any(alias in verified_names for alias in tmpl["aliases"])
+        if is_missing and tmpl["gap"] not in seen_gaps:
+            seen_gaps.add(tmpl["gap"])
+            # Fetch verified genuine resources
+            resources = resource_registry.get_resources_for_skill(tmpl["gap"], limit=2)
+            verified_res = [
+                {
+                    "title": r.title,
+                    "provider": r.provider,
+                    "url": r.url,
+                    "type": r.resource_type,
+                }
+                for r in resources
+            ]
+            recommended.append({
+                "id": f"gap_proj_{tmpl['gap'].lower()}",
+                "title": tmpl["title"],
+                "description": tmpl["description"],
+                "difficulty": tmpl["difficulty"],
+                "estimated_weeks": tmpl["estimated_weeks"],
+                "skills": tmpl["skills"],
+                "key_features": tmpl["key_features"],
+                "milestones": tmpl["milestones"],
+                "validation_criteria": tmpl["validation_criteria"],
+                "deliverable": tmpl["deliverable"],
+                "target_skill_gap": tmpl["gap"],
+                "gap_explanation": tmpl["gap_explanation"],
+                "verified_resources": verified_res,
+            })
+            if len(recommended) >= 3:
+                break
+
+    # If candidate already has most skills verified, fill remaining slots with advanced engineering projects
+    if len(recommended) < 3:
+        for tmpl in gap_templates:
+            if tmpl["gap"] not in seen_gaps:
+                seen_gaps.add(tmpl["gap"])
+                resources = resource_registry.get_resources_for_skill(tmpl["gap"], limit=2)
+                verified_res = [
+                    {
+                        "title": r.title,
+                        "provider": r.provider,
+                        "url": r.url,
+                        "type": r.resource_type,
+                    }
+                    for r in resources
+                ]
+                recommended.append({
+                    "id": f"adv_proj_{tmpl['gap'].lower()}",
+                    "title": tmpl["title"],
+                    "description": tmpl["description"],
+                    "difficulty": tmpl["difficulty"],
+                    "estimated_weeks": tmpl["estimated_weeks"],
+                    "skills": tmpl["skills"],
+                    "key_features": tmpl["key_features"],
+                    "milestones": tmpl["milestones"],
+                    "validation_criteria": tmpl["validation_criteria"],
+                    "deliverable": tmpl["deliverable"],
+                    "target_skill_gap": tmpl["gap"],
+                    "gap_explanation": tmpl["gap_explanation"],
+                    "verified_resources": verified_res,
+                })
+                if len(recommended) >= 3:
+                    break
+
+    return recommended

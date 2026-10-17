@@ -16,6 +16,7 @@ from app.models.assessment import PracticalAssessment
 from app.models.github import GithubRepository, RepositoryAnalysis
 from app.models.job import JobPosting
 from app.models.profile import StudentProfile
+from app.models.resume import BaseCV
 from app.models.skill import StudentSkill
 from app.schemas.resume import (
     ResumeAssessmentItem,
@@ -79,20 +80,50 @@ class ResumeGenerator:
             job_res = await db.execute(job_stmt)
             job = job_res.scalar_one_or_none()
 
+        # 6. Fetch Base CV if available
+        cv_stmt = (
+            select(BaseCV)
+            .where(BaseCV.firebase_uid == firebase_uid)
+            .order_by(BaseCV.created_at.desc())
+        )
+        base_cv = (await db.execute(cv_stmt)).scalar_one_or_none()
+        cv_data = base_cv.extracted_data if base_cv and isinstance(base_cv.extracted_data, dict) else {}
+
         # ---------------------------------------------------------------------
         # Assemble Contact Info
         # ---------------------------------------------------------------------
+        c_name = (
+            cv_data.get("full_name")
+            or (profile.full_name if profile and profile.full_name else None)
+            or "Candidate Name"
+        )
+        c_email = (
+            cv_data.get("email")
+            or (profile.email if profile and profile.email else None)
+            or f"{firebase_uid[:8]}@kuru.ai"
+        )
+        c_phone = cv_data.get("phone") or (getattr(profile, "phone_number", None) if profile else None)
+        c_github = (
+            f"https://github.com/{profile.github_username}"
+            if profile and getattr(profile, "github_username", None)
+            else (f"https://github.com/{cv_data['github_handle']}" if cv_data.get("github_handle") else None)
+        )
+        c_linkedin = (
+            getattr(profile, "linkedin_url", None)
+            if profile else None
+        ) or (f"https://linkedin.com/in/{cv_data['linkedin_handle']}" if cv_data.get("linkedin_handle") else None)
+
         contact_info = ResumeContactInfo(
-            full_name=(profile.full_name if profile and profile.full_name else "Candidate Name"),
-            email=(profile.email if profile and profile.email else f"{firebase_uid[:8]}@kuru.ai"),
-            phone=getattr(profile, "phone_number", None) if profile else None,
+            full_name=c_name,
+            email=c_email,
+            phone=c_phone,
             location=(
                 ", ".join(profile.preferred_locations[:2])
                 if profile and profile.preferred_locations
                 else "India"
             ),
-            github_url=f"https://github.com/{profile.github_username}" if profile and getattr(profile, "github_username", None) else None,
-            linkedin_url=getattr(profile, "linkedin_url", None) if profile else None,
+            github_url=c_github,
+            linkedin_url=c_linkedin,
             portfolio_url=getattr(profile, "portfolio_url", None) if profile else None,
         )
 
@@ -179,54 +210,82 @@ class ResumeGenerator:
         # ---------------------------------------------------------------------
         project_items: list[ResumeProjectItem] = []
         for r in repositories[:4]:
-            p_skills = [
+            repo_lang = getattr(r, "primary_language", None) or getattr(r, "language", None)
+            matching_skills = [
                 s.skill_name for s in skills
                 if r.name in (s.source_repositories or [])
-            ] or [r.language] if r.language else ["Python"]
-
-            bullets = [
-                f"Engineered and maintained '{r.name}' using {', '.join(p_skills[:3])}.",
-                f"Implemented structured modules with static verification, repository AST parsing, and zero security vulnerabilities.",
             ]
-            if r.stargazers_count and r.stargazers_count > 0:
-                bullets.append(f"Achieved {r.stargazers_count} GitHub stars with open-source developer adoption.")
+            if matching_skills:
+                p_skills = matching_skills
+            elif repo_lang:
+                p_skills = [repo_lang]
+            else:
+                p_skills = []
+
+            tech_str = f" using {', '.join(p_skills[:3])}" if p_skills else ""
+            bullets = [
+                f"Engineered and maintained '{r.name}'{tech_str}.",
+                "Implemented structured modules with static verification, repository AST parsing, and zero security vulnerabilities.",
+            ]
+            stars = getattr(r, "stars_count", None) or getattr(r, "stargazers_count", 0) or 0
+            if stars > 0:
+                bullets.append(f"Achieved {stars} GitHub stars with open-source developer adoption.")
 
             project_items.append(
                 ResumeProjectItem(
                     title=r.name.replace("_", " ").replace("-", " ").title(),
-                    description=r.description or f"Open-source engineering project built with {', '.join(p_skills[:3])}.",
+                    description=r.description or (
+                        f"Open-source engineering project built with {', '.join(p_skills[:3])}."
+                        if p_skills else f"Open-source engineering repository '{r.name}'."
+                    ),
                     tech_stack=p_skills[:5],
                     bullet_points=bullets,
                     repo_url=r.html_url or f"https://github.com/{contact_info.github_url or 'candidate'}/{r.name}",
-                    evidence_tags=[f"repo:{r.name}", f"stars:{r.stargazers_count}"],
+                    evidence_tags=[f"repo:{r.name}", f"stars:{stars}"],
                 )
             )
 
-        # If user has no repositories connected yet, extract from skills evidence without fabricating repositories
-        if not project_items and skills:
-            used_skills = [s.skill_name for s in skills[:4]]
-            project_items = [
-                ResumeProjectItem(
-                    title=f"{request.target_role} Architecture Portfolio",
-                    description=f"Core microservices engineering implementation utilizing {', '.join(used_skills)}.",
-                    tech_stack=used_skills,
-                    bullet_points=[
-                        f"Architected modular microservices leveraging {', '.join(used_skills[:2])} with strict API schemas.",
-                        f"Demonstrated verified engineering competency validated through isolated sandbox unit tests.",
-                    ],
-                    repo_url=None,
-                    evidence_tags=["portfolio:verified_skills"],
-                )
-            ]
+        # If user has no repositories connected yet, fallback to CV projects or skills portfolio
+        if not project_items:
+            if cv_data.get("projects") and isinstance(cv_data["projects"], list):
+                for p in cv_data["projects"]:
+                    if isinstance(p, dict) and p.get("title"):
+                        project_items.append(
+                            ResumeProjectItem(
+                                title=p.get("title", "Software Engineering Project"),
+                                description=p.get("description", "Technical project from candidate portfolio."),
+                                tech_stack=p.get("tech_stack") or [s.skill_name for s in skills[:3]],
+                                bullet_points=p.get("bullet_points") or [
+                                    "Engineered modular features with rigorous automated testing.",
+                                ],
+                                repo_url=p.get("url") or p.get("repo_url"),
+                                evidence_tags=["source:base_cv"],
+                            )
+                        )
+            elif skills:
+                used_skills = [s.skill_name for s in skills[:4]]
+                project_items = [
+                    ResumeProjectItem(
+                        title=f"{request.target_role} Architecture Portfolio",
+                        description=f"Core microservices engineering implementation utilizing {', '.join(used_skills)}.",
+                        tech_stack=used_skills,
+                        bullet_points=[
+                            f"Architected modular microservices leveraging {', '.join(used_skills[:2])} with strict API schemas.",
+                            f"Demonstrated verified engineering competency validated through isolated sandbox unit tests.",
+                        ],
+                        repo_url=None,
+                        evidence_tags=["portfolio:verified_skills"],
+                    )
+                ]
 
         # ---------------------------------------------------------------------
-        # Assemble Experience (Strictly preserved from Profile, never invented)
+        # Assemble Experience (Strictly preserved from Profile or Base CV, never invented)
         # ---------------------------------------------------------------------
         experience_items: list[ResumeExperienceItem] = []
-        profile_experience = getattr(profile, "experience", None) if profile else None
+        profile_experience = (getattr(profile, "experience", None) if profile else None) or cv_data.get("experience")
         if profile_experience and isinstance(profile_experience, list):
             for exp in profile_experience:
-                if isinstance(exp, dict) and exp.get("role"):
+                if isinstance(exp, dict) and (exp.get("role") or exp.get("company")):
                     b_list = exp.get("bullet_points") or [
                         f"Developed scalable software features using {', '.join([s.skill_name for s in skills[:2]])}."
                     ]
@@ -244,10 +303,10 @@ class ResumeGenerator:
                     )
 
         # ---------------------------------------------------------------------
-        # Assemble Education (Strictly from Profile, never invented)
+        # Assemble Education (Strictly from Profile or Base CV, never invented)
         # ---------------------------------------------------------------------
         education_items: list[ResumeEducationItem] = []
-        profile_education = getattr(profile, "education", None) if profile else None
+        profile_education = (getattr(profile, "education", None) if profile else None) or cv_data.get("education")
         if profile_education and isinstance(profile_education, list):
             for edu in profile_education:
                 if isinstance(edu, dict) and (edu.get("degree") or edu.get("institution")):
@@ -256,8 +315,8 @@ class ResumeGenerator:
                             degree=edu.get("degree", "Degree"),
                             institution=edu.get("institution", "Institution"),
                             field_of_study=edu.get("field_of_study") or edu.get("major"),
-                            graduation_year=str(edu.get("graduation_year") or edu.get("year") or ""),
-                            grade_or_gpa=str(edu.get("grade_or_gpa") or edu.get("gpa") or "") or None,
+                            graduation_year=str(edu.get("graduation_year") or edu.get("end_year") or edu.get("year") or ""),
+                            grade_or_gpa=str(edu.get("grade_or_gpa") or edu.get("grade") or edu.get("gpa") or "") or None,
                         )
                     )
 
@@ -267,7 +326,9 @@ class ResumeGenerator:
         matching_skills: list[str] = []
         missing_skills: list[str] = []
         match_score: float = 75.0
-        company_name = job.company if job else None
+        company_name = job.company if job else getattr(request, "target_company", None)
+        if not company_name and request.custom_instructions and "Target company:" in request.custom_instructions:
+            company_name = request.custom_instructions.split("Target company:", 1)[1].strip()
         job_title = job.title if job else request.target_role
 
         if job:

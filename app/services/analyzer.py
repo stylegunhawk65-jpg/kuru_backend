@@ -336,6 +336,13 @@ class RepositoryAnalyzer:
         elif lower_path.endswith("cargo.toml"):
             packages = parse_cargo_toml(content)
             self._add_evidence("Rust", "Language", "manifest_dependency", file_path, "Rust Cargo manifest in Cargo.toml", 0.90)
+        elif lower_path.endswith("pubspec.yaml"):
+            self._add_evidence("Flutter", "Framework", "manifest_dependency", file_path, "Flutter application manifest pubspec.yaml", 0.90)
+            self._add_evidence("Dart", "Language", "manifest_dependency", file_path, "Dart SDK dependencies in pubspec.yaml", 0.90)
+            if "riverpod" in content.lower():
+                self._add_evidence("Riverpod", "Framework", "manifest_dependency", file_path, "Flutter Riverpod state management in pubspec.yaml", 0.85)
+            if "firebase" in content.lower():
+                self._add_evidence("Firebase", "Cloud", "manifest_dependency", file_path, "Firebase SDK integration in pubspec.yaml", 0.85)
 
         for pkg in packages:
             if pkg in PACKAGE_TO_SKILL:

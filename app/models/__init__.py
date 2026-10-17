@@ -5,7 +5,7 @@ from app.models.intelligence import CareerAssessment
 from app.models.job import JobPosting, JobSource, SavedJob
 from app.models.notification import Notification, Reminder
 from app.models.profile import StudentProfile
-from app.models.resume import Resume
+from app.models.resume import BaseCV, Resume
 from app.models.skill import SkillGraphEdge, StudentSkill
 from app.models.skillproof import SkillProofEvidence, SkillProofRun
 
@@ -19,6 +19,7 @@ __all__ = [
     "JobPosting",
     "JobSource",
     "SavedJob",
+    "BaseCV",
     "Resume",
     "CareerAssessment",
     "AgentApprovalRequest",

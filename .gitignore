@@ -97,3 +97,6 @@ checkpoints/
 hf_cache/
 evaluation_results/*
 !evaluation_results/*.json
+
+# Uploaded CVs and user data
+storage/

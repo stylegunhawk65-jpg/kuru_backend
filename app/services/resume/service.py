@@ -8,14 +8,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ResourceNotFoundError
-from app.models.resume import Resume
+from app.models.resume import BaseCV, Resume
 from app.schemas.resume import (
+    BaseCVConfirmRequest,
     ResumeCreate,
     ResumeGenerateRequest,
     ResumeResponse,
     ResumeUpdate,
 )
 from app.services.llm.base import BaseLLMProvider
+from app.services.resume.cv_parser import cv_parser
 from app.services.resume.generator import resume_generator
 from app.services.resume.pdf_exporter import resume_pdf_exporter
 
@@ -243,5 +245,122 @@ class ResumeService:
         await db.delete(record)
         await db.commit()
 
+    # -------------------------------------------------------------------------
+    # Base CV Management
+    # -------------------------------------------------------------------------
+    @classmethod
+    async def upload_base_cv(
+        cls,
+        db: AsyncSession,
+        firebase_uid: str,
+        filename: str,
+        content: bytes,
+    ) -> BaseCV:
+        """Upload, validate, extract, and store base CV."""
+        file_type = cv_parser.validate_file(filename, content)
+        raw_text = cv_parser.extract_text(content, file_type)
+        extracted = cv_parser.parse_structured_data(raw_text)
+
+        # Store file safely in storage/cv_uploads/{firebase_uid}/
+        import os
+        upload_dir = os.path.join("storage", "cv_uploads", firebase_uid)
+        os.makedirs(upload_dir, exist_ok=True)
+        cv_id = str(uuid.uuid4())
+        safe_path = os.path.join(upload_dir, f"{cv_id}.{file_type}")
+        with open(safe_path, "wb") as f:
+            f.write(content)
+
+        # Upsert or save BaseCV
+        stmt = (
+            select(BaseCV)
+            .where(BaseCV.firebase_uid == firebase_uid)
+            .order_by(BaseCV.created_at.desc())
+        )
+        existing = (await db.execute(stmt)).scalar_one_or_none()
+        if existing:
+            existing.filename = filename
+            existing.file_type = file_type
+            existing.file_size_bytes = len(content)
+            existing.file_path = safe_path
+            existing.raw_text = raw_text
+            existing.extracted_data = extracted
+            existing.is_confirmed = False
+            base_cv = existing
+        else:
+            base_cv = BaseCV(
+                id=cv_id,
+                firebase_uid=firebase_uid,
+                filename=filename,
+                file_type=file_type,
+                file_size_bytes=len(content),
+                file_path=safe_path,
+                raw_text=raw_text,
+                extracted_data=extracted,
+                is_confirmed=False,
+            )
+            db.add(base_cv)
+
+        await db.commit()
+        await db.refresh(base_cv)
+        return base_cv
+
+    @classmethod
+    async def get_base_cv(
+        cls,
+        db: AsyncSession,
+        firebase_uid: str,
+    ) -> BaseCV | None:
+        """Retrieve existing base CV for user."""
+        stmt = (
+            select(BaseCV)
+            .where(BaseCV.firebase_uid == firebase_uid)
+            .order_by(BaseCV.created_at.desc())
+        )
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
+
+    @classmethod
+    async def confirm_base_cv(
+        cls,
+        db: AsyncSession,
+        firebase_uid: str,
+        payload: BaseCVConfirmRequest,
+    ) -> BaseCV:
+        """User reviews and confirms or adjusts extracted CV details before tailoring."""
+        base_cv = await cls.get_base_cv(db, firebase_uid)
+        if not base_cv:
+            raise ResourceNotFoundError("BaseCV", firebase_uid)
+
+        curr = dict(base_cv.extracted_data or {})
+        if payload.full_name is not None:
+            curr["full_name"] = payload.full_name
+        if payload.email is not None:
+            curr["email"] = payload.email
+        if payload.phone is not None:
+            curr["phone"] = payload.phone
+        if payload.github_handle is not None:
+            curr["github_handle"] = payload.github_handle
+        if payload.linkedin_handle is not None:
+            curr["linkedin_handle"] = payload.linkedin_handle
+        if payload.summary is not None:
+            curr["summary"] = payload.summary
+        if payload.skills:
+            curr["skills"] = payload.skills
+        if payload.education:
+            curr["education"] = payload.education
+        if payload.experience:
+            curr["experience"] = payload.experience
+        if payload.projects:
+            curr["projects"] = payload.projects
+        if payload.certifications:
+            curr["certifications"] = payload.certifications
+
+        base_cv.extracted_data = curr
+        base_cv.is_confirmed = True
+        await db.commit()
+        await db.refresh(base_cv)
+        return base_cv
+
 
 resume_service = ResumeService()
+

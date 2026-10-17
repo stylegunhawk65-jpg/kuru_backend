@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_workflow import AgentApprovalRequest
 from app.models.assessment import PracticalAssessment
+from app.models.github import GithubRepository
 from app.models.job import JobPosting, SavedJob
 from app.models.profile import StudentProfile
 from app.models.resume import Resume
@@ -712,3 +713,323 @@ async def test_resume_application_cross_user_isolation(
 
     unauth_app = await async_client.get("/api/v1/applications")
     assert unauth_app.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_resume_generation_github_repository_language_regression(
+    db_session: AsyncSession, seed_phase11_data
+):
+    """Regression test ensuring resume generation succeeds without 'language' attribute crashes.
+    
+    Verifies that GithubRepository instances with missing or differently stored language metadata
+    (primary_language=None, primary_language='Rust', or legacy .language accessor) do not crash
+    and generate valid ATS project items.
+    """
+    repo_null_lang = GithubRepository(
+        id=str(uuid.uuid4()),
+        firebase_uid=USER_ALICE_UID,
+        github_repo_id="repo_regression_null",
+        name="kuru_null_lang",
+        full_name="alice/kuru_null_lang",
+        html_url="https://github.com/alice/kuru_null_lang",
+        primary_language=None,
+        stars_count=12,
+        forks_count=3,
+        selected_for_analysis=True,
+    )
+    repo_rust_lang = GithubRepository(
+        id=str(uuid.uuid4()),
+        firebase_uid=USER_ALICE_UID,
+        github_repo_id="repo_regression_rust",
+        name="kuru_rust_core",
+        full_name="alice/kuru_rust_core",
+        html_url="https://github.com/alice/kuru_rust_core",
+        primary_language="Rust",
+        stars_count=45,
+        forks_count=5,
+        selected_for_analysis=True,
+    )
+    db_session.add_all([repo_null_lang, repo_rust_lang])
+    await db_session.commit()
+
+    # Test model attribute compatibility
+    assert repo_null_lang.language is None
+    assert repo_null_lang.stargazers_count == 12
+    assert repo_rust_lang.language == "Rust"
+    assert repo_rust_lang.stargazers_count == 45
+
+    # Generate resume through resume_service
+    request = ResumeGenerateRequest(
+        target_role="Systems Engineer",
+        job_id="job_acme_backend",
+        save_to_db=False,
+    )
+    resume_response = await resume_service.generate_resume(
+        db=db_session,
+        firebase_uid=USER_ALICE_UID,
+        request=request,
+    )
+
+    assert resume_response is not None
+    assert resume_response.target_role == "Systems Engineer"
+    
+    # Verify projects were generated from repositories without crash
+    project_titles = [
+        p["title"].lower() if isinstance(p, dict) else p.title.lower()
+        for p in resume_response.projects
+    ]
+    assert any("kuru rust core" in t for t in project_titles)
+    assert any("kuru null lang" in t for t in project_titles)
+
+
+@pytest.mark.asyncio
+async def test_multi_repository_selection_and_dynamic_career_readiness(
+    async_client: AsyncClient, db_session: AsyncSession, seed_phase11_data
+):
+    """Test multi-repository selection and dynamic Career Readiness recalculation."""
+    # 1. Initially check Career Twin readiness
+    ct_res = await async_client.get("/api/v1/career-twin", headers=USER_ALICE_HEADERS)
+    assert ct_res.status_code == 200
+    ct_data = ct_res.json()
+    assert "readiness_score" in ct_data
+    assert "is_insufficient_data" in ct_data
+
+    # 2. Deselect all repositories (select empty list)
+    select_empty_res = await async_client.post(
+        "/api/v1/github/repos/select",
+        json={"repo_ids": []},
+        headers=USER_ALICE_HEADERS,
+    )
+    assert select_empty_res.status_code == 200
+    assert len([r for r in select_empty_res.json() if r.get("selected_for_analysis")]) == 0
+
+    # 3. Career Twin should now honestly report insufficient data
+    ct_empty_res = await async_client.get("/api/v1/career-twin", headers=USER_ALICE_HEADERS)
+    assert ct_empty_res.status_code == 200
+    empty_data = ct_empty_res.json()
+    assert empty_data["readiness_score"] == 0
+    assert empty_data["is_insufficient_data"] is True
+    assert empty_data["selected_repositories_count"] == 0
+    assert "select at least one" in empty_data["score_explanation"].lower()
+    assert len(empty_data["next_recommended_actions"]) > 0
+
+    # 4. Select specific repository
+    repo_alice = GithubRepository(
+        id="repo_alice_selected",
+        firebase_uid=USER_ALICE_UID,
+        github_repo_id="gh_repo_alice_1",
+        name="alice_portfolio",
+        full_name="alice/alice_portfolio",
+        html_url="https://github.com/alice/alice_portfolio",
+        primary_language="Python",
+        stars_count=10,
+        forks_count=2,
+        selected_for_analysis=False,
+    )
+    db_session.add(repo_alice)
+    await db_session.commit()
+
+    select_res = await async_client.post(
+        "/api/v1/github/repos/select",
+        json={"repo_ids": ["repo_alice_selected"]},
+        headers=USER_ALICE_HEADERS,
+    )
+    assert select_res.status_code == 200
+    assert len([r for r in select_res.json() if r.get("selected_for_analysis")]) == 1
+
+    # 5. Career Twin should now reflect selected repo
+    ct_selected_res = await async_client.get("/api/v1/career-twin", headers=USER_ALICE_HEADERS)
+    assert ct_selected_res.status_code == 200
+    selected_data = ct_selected_res.json()
+    assert selected_data["selected_repositories_count"] == 1
+    assert selected_data["is_insufficient_data"] is False
+    assert selected_data["readiness_score"] > 0
+
+
+@pytest.mark.asyncio
+async def test_repository_detail_and_skillproof_similarity(
+    async_client: AsyncClient, db_session: AsyncSession, seed_phase11_data
+):
+    """Test detailed repository analysis and SkillProof similarity findings endpoint."""
+    repo_alice = GithubRepository(
+        id="repo_detail_test",
+        firebase_uid=USER_ALICE_UID,
+        github_repo_id="gh_detail_1",
+        name="kuru_engine",
+        full_name="alice/kuru_engine",
+        html_url="https://github.com/alice/kuru_engine",
+        description="Core AST evaluation engine for Kuru",
+        primary_language="Python",
+        stars_count=25,
+        forks_count=5,
+        selected_for_analysis=True,
+    )
+    db_session.add(repo_alice)
+    await db_session.commit()
+
+    res = await async_client.get("/api/v1/github/repos/repo_detail_test/detail", headers=USER_ALICE_HEADERS)
+    assert res.status_code == 200
+    detail = res.json()
+    assert detail["name"] == "kuru_engine"
+    assert detail["primary_language"] == "Python"
+    assert "honest_reporting" in detail
+    assert detail["honest_reporting"]["plagiarism_claim"] is False
+    assert detail["honest_reporting"]["ai_generation_claim"] is False
+    assert "investigation_bands" in detail["honest_reporting"]
+    assert "below_25" in detail["honest_reporting"]["investigation_bands"]
+    assert "practical_assessment" in detail
+
+
+@pytest.mark.asyncio
+async def test_base_cv_upload_confirmation_and_tailoring(
+    async_client: AsyncClient, db_session: AsyncSession, seed_phase11_data
+):
+    """Test Master Base CV upload, parsing, confirmation, and integration into tailored resume."""
+    # 1. Prepare minimal valid PDF
+    pdf_content = b"%PDF-1.4\nCandidate: Alice Walker\nEmail: alice.walker@example.com\nPhone: +1 555-0199\nEDUCATION: B.S. Computer Science, MIT, 2024\nEXPERIENCE: Senior Python Engineer at Tech Innovators (2022 - 2024)\nSKILLS: Python, FastAPI, Docker, PostgreSQL\n%%EOF"
+    
+    files = {"file": ("Alice_Master_CV.pdf", pdf_content, "application/pdf")}
+    upload_res = await async_client.post(
+        "/api/v1/resumes/cv/upload",
+        files=files,
+        headers=USER_ALICE_HEADERS,
+    )
+    assert upload_res.status_code == 201
+    uploaded_cv = upload_res.json()
+    assert uploaded_cv["filename"] == "Alice_Master_CV.pdf"
+    assert "alice.walker@example.com" in uploaded_cv["email"]
+
+    # 2. Retrieve Base CV
+    get_res = await async_client.get("/api/v1/resumes/cv", headers=USER_ALICE_HEADERS)
+    assert get_res.status_code == 200
+    assert get_res.json()["filename"] == "Alice_Master_CV.pdf"
+
+    # 3. Confirm Base CV
+    confirm_res = await async_client.put(
+        "/api/v1/resumes/cv/confirm",
+        json={
+            "full_name": "Alice Walker, M.S.",
+            "email": "alice.walker@example.com",
+            "phone": "+1 555-0199",
+            "skills": ["Python", "FastAPI", "PostgreSQL", "Docker", "Kubernetes"],
+            "experience": [{"title": "Senior Python Engineer", "company": "Tech Innovators", "duration": "2022 - 2024"}],
+            "education": [{"degree": "B.S. Computer Science", "institution": "MIT", "year": "2024"}],
+        },
+        headers=USER_ALICE_HEADERS,
+    )
+    assert confirm_res.status_code == 200
+    confirmed = confirm_res.json()
+    assert confirmed["is_confirmed"] is True
+    assert confirmed["full_name"] == "Alice Walker, M.S."
+
+    # 4. Tailor a resume: should now seamlessly blend confirmed Master CV baseline
+    tailor_res = await async_client.post(
+        "/api/v1/resumes/tailor",
+        json={
+            "target_role": "Lead Backend Architect",
+            "target_company": "Apex Cloud Systems",
+        },
+        headers=USER_ALICE_HEADERS,
+    )
+    assert tailor_res.status_code == 200
+    tailored = tailor_res.json()
+    assert tailored["target_role"] == "Lead Backend Architect"
+    assert tailored["tailoring_metadata"]["company"] == "Apex Cloud Systems"
+    # Candidate name in contact_info should match Alice Walker, M.S.
+    assert "Alice Walker" in tailored["contact_info"]["full_name"]
+
+
+@pytest.mark.asyncio
+async def test_individual_skill_selection_and_targeted_analysis_modes(
+    async_client: AsyncClient, db_session: AsyncSession, seed_phase11_data
+):
+    """Test per-repository individual skill selection persistence and explicit analysis modes."""
+    # 1. Create a repository
+    repo_alice = GithubRepository(
+        id="repo_skill_select_test",
+        firebase_uid=USER_ALICE_UID,
+        github_repo_id="gh_select_1",
+        name="kuru_pipeline",
+        full_name="alice/kuru_pipeline",
+        html_url="https://github.com/alice/kuru_pipeline",
+        primary_language="Python",
+        stars_count=18,
+        selected_for_analysis=True,
+    )
+    db_session.add(repo_alice)
+    await db_session.commit()
+
+    # 2. Persist individual skill selection
+    sel_res = await async_client.post(
+        "/api/v1/github/repos/repo_skill_select_test/skills/select",
+        json={"selected_skills": ["Python", "FastAPI"]},
+        headers=USER_ALICE_HEADERS,
+    )
+    assert sel_res.status_code == 200
+    sel_data = sel_res.json()
+    assert sel_data["repository_id"] == "repo_skill_select_test"
+    assert "Python" in sel_data["selected_skills"]
+    assert "FastAPI" in sel_data["selected_skills"]
+
+    # 3. Retrieve persisted skill selections
+    get_sel_res = await async_client.get(
+        "/api/v1/github/repos/repo_skill_select_test/skills/selected",
+        headers=USER_ALICE_HEADERS,
+    )
+    assert get_sel_res.status_code == 200
+    assert get_sel_res.json()["selected_skills"] == ["Python", "FastAPI"]
+
+    # 4. Detail endpoint reflects selected_skills
+    detail_res = await async_client.get(
+        "/api/v1/github/repos/repo_skill_select_test/detail",
+        headers=USER_ALICE_HEADERS,
+    )
+    assert detail_res.status_code == 200
+    detail_data = detail_res.json()
+    assert "selected_skills" in detail_data
+    assert detail_data["selected_skills"] == ["Python", "FastAPI"]
+
+    # 5. Execute targeted analysis mode (Selected Skills)
+    with patch("app.services.github_client.GitHubClient.get_repository_languages", return_value={"Python": 12000}), \
+         patch("app.services.github_client.GitHubClient.get_repository_tree", return_value=[{"path": "main.py", "type": "blob"}]), \
+         patch("app.services.github_client.GitHubClient.get_file_content", return_value="import fastapi\napp = fastapi.FastAPI()\n"):
+        analyze_res = await async_client.post(
+            "/api/v1/github/analyze",
+            json={
+                "repo_ids": ["repo_skill_select_test"],
+                "mode": "selected_skills",
+                "selected_skills": ["Python"],
+            },
+            headers=USER_ALICE_HEADERS,
+        )
+        assert analyze_res.status_code == 200
+        an_data = analyze_res.json()
+        assert "selected skills" in an_data["message"]
+        analysis_item = an_data["analyses"][0]
+        assert analysis_item["file_tree_summary"]["analysis_mode"] == "selected_skills"
+
+
+@pytest.mark.asyncio
+async def test_growth_projects_mapped_to_skill_gaps(
+    async_client: AsyncClient, db_session: AsyncSession, seed_phase11_data
+):
+    """Test that portfolio project recommendations directly target verified candidate skill gaps."""
+    res = await async_client.get("/api/v1/growth/projects", headers=USER_ALICE_HEADERS)
+    assert res.status_code == 200
+    projects = res.json()
+    assert len(projects) >= 2
+
+    for p in projects:
+        assert "target_skill_gap" in p
+        assert "gap_explanation" in p
+        assert "milestones" in p
+        assert "validation_criteria" in p
+        assert "deliverable" in p
+        assert "verified_resources" in p
+        # Every verified resource has genuine domain
+        for r in p["verified_resources"]:
+            assert "url" in r
+            assert r["url"].startswith("http")
+
+
+

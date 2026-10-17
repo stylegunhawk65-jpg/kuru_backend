@@ -95,6 +95,7 @@ class ResumeGenerateRequest(BaseModel):
     """Request payload to generate an ATS-friendly tailored resume."""
 
     target_role: str = Field(default="Backend Engineer", description="Target role name")
+    target_company: str | None = Field(default=None, description="Optional target company name")
     job_id: str | None = Field(default=None, description="Optional ID of real JobPosting to tailor against")
     custom_instructions: str | None = Field(default=None, max_length=500, description="Optional specific emphasis instructions")
     save_to_db: bool = Field(default=True, description="Whether to automatically persist the generated resume snapshot")
@@ -153,3 +154,43 @@ class ResumeResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class BaseCVConfirmRequest(BaseModel):
+    """Payload to confirm or adjust extracted CV entities before generating tailored resumes."""
+
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    github_handle: str | None = None
+    linkedin_handle: str | None = None
+    summary: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    education: list[dict[str, Any]] = Field(default_factory=list)
+    experience: list[dict[str, Any]] = Field(default_factory=list)
+    projects: list[dict[str, Any]] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+
+
+class BaseCVResponse(BaseModel):
+    """Structured information extracted from uploaded base CV."""
+
+    id: str
+    firebase_uid: str
+    filename: str
+    file_type: str
+    file_size_bytes: int
+    raw_text: str
+    extracted_data: dict[str, Any]
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    education: list[dict[str, Any]] = Field(default_factory=list)
+    experience: list[dict[str, Any]] = Field(default_factory=list)
+    is_confirmed: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+

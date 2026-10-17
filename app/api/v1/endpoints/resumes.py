@@ -3,22 +3,86 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthenticatedUser, get_current_user
 from app.db.session import get_db
 from app.schemas.resume import (
+    BaseCVConfirmRequest,
+    BaseCVResponse,
     ResumeCreate,
     ResumeGenerateRequest,
     ResumeResponse,
     ResumeUpdate,
 )
+from app.services.resume.cv_parser import CVParserError
 from app.services.resume.service import resume_service
 
 logger = logging.getLogger("kuru.resumes.api")
 router = APIRouter()
+
+
+@router.post(
+    "/cv/upload",
+    response_model=BaseCVResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload and Parse Base CV",
+    description="Upload a PDF or DOCX CV document. Validates file integrity, extracts structured candidate details, and stores securely.",
+)
+async def upload_base_cv(
+    file: UploadFile = File(...),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Upload and parse a base CV/resume file."""
+    content = await file.read()
+    try:
+        return await resume_service.upload_base_cv(
+            db=db,
+            firebase_uid=current_user.uid,
+            filename=file.filename or "cv.pdf",
+            content=content,
+        )
+    except CVParserError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+
+@router.get(
+    "/cv",
+    response_model=BaseCVResponse | None,
+    summary="Get Current Base CV",
+    description="Retrieve active base CV and parsed details for the authenticated user.",
+)
+async def get_base_cv(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Retrieve the uploaded base CV."""
+    return await resume_service.get_base_cv(db=db, firebase_uid=current_user.uid)
+
+
+@router.put(
+    "/cv/confirm",
+    response_model=BaseCVResponse,
+    summary="Confirm or Edit Extracted CV Details",
+    description="Allows the candidate to review, correct, and confirm extracted CV information before using it for tailoring.",
+)
+async def confirm_base_cv(
+    payload: BaseCVConfirmRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Confirm or update extracted entities on the base CV."""
+    return await resume_service.confirm_base_cv(
+        db=db,
+        firebase_uid=current_user.uid,
+        payload=payload,
+    )
 
 
 class ResumeTailorRequest(BaseModel):
@@ -44,6 +108,7 @@ async def tailor_resume(
     """Tailor resume for role and company."""
     gen_req = ResumeGenerateRequest(
         target_role=payload.target_role,
+        target_company=payload.target_company,
         job_id=payload.job_id,
         custom_instructions=f"Target company: {payload.target_company}" if payload.target_company else None,
         save_to_db=True,
