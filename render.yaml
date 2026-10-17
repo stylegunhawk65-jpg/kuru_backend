@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: kuru-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: ENVIRONMENT
+        value: production
+      - key: FIREBASE_PROJECT_ID
+        value: career-ba46c
+      - key: LLM_PROVIDER
+        value: mock
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ENCRYPTION_KEY
+        value: kuru_dev_secret_key_32_bytes_safe_fallback_123=
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kuru-db
+          property: connectionString
+
+databases:
+  - name: kuru-db
+    databaseName: kuru_db
+    user: kuru_user
+    plan: free

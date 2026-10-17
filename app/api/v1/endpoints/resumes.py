@@ -253,6 +253,10 @@ async def regenerate_resume(
         }
     },
 )
+@router.get(
+    "/{id}/export",
+    include_in_schema=False,
+)
 async def export_resume_pdf(
     id: str,
     current_user: AuthenticatedUser = Depends(get_current_user),

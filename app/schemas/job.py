@@ -37,6 +37,10 @@ class JobPostingWithMatchResponse(JobPostingResponse):
     matched_skills: list[str] = []
     missing_skills: list[str] = []
     match_reasons: list[str] = []
+    demonstrated_skills: list[str] = []
+    repo_supported_skills: list[str] = []
+    unverified_matched_skills: list[str] = []
+    missing_skills_breakdown: list[dict[str, Any]] = []
     is_saved: bool = False
 
 

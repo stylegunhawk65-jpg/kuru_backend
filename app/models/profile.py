@@ -2,7 +2,7 @@
 
 from typing import Any
 import uuid
-from sqlalchemy import JSON, String, Text
+from sqlalchemy import Boolean, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -50,6 +50,13 @@ class StudentProfile(Base, TimestampMixin):
         nullable=False,
     )
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    linkedin_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    linkedin_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    certificates: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
 
     def __repr__(self) -> str:
         return f"<StudentProfile(id={self.id}, firebase_uid={self.firebase_uid}, full_name={self.full_name})>"

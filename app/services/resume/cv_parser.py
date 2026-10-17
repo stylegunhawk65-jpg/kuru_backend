@@ -167,67 +167,80 @@ class CVParser:
             if not matched_header:
                 sections[current_sec].append(line)
 
-        # 4. Parse Education
+        # 4. Parse Education (Strictly from text, no fabricated items)
         education_items: list[dict[str, Any]] = []
-        edu_text = "\n".join(sections["education"])
-        degree_patterns = [
-            r"(B\.?Tech|Bachelor\s+of\s+Technology|B\.?E\.?|B\.?S\.?|Master|M\.?Tech|M\.?S\.?|Ph\.?D|Diploma)",
-        ]
-        degree_match = re.search(degree_patterns[0], edu_text, re.IGNORECASE)
-        degree = degree_match.group(0) if degree_match else "Bachelor of Technology"
+        if sections["education"]:
+            edu_text = "\n".join(sections["education"])
+            degree_patterns = [
+                r"(B\.?Tech|Bachelor\s+of\s+Technology|B\.?E\.?|B\.?S\.?|Master|M\.?Tech|M\.?S\.?|Ph\.?D|Diploma|Associate\s+Degree)",
+            ]
+            degree_match = re.search(degree_patterns[0], edu_text, re.IGNORECASE)
+            degree_val = degree_match.group(0) if degree_match else "Degree"
 
-        year_match = re.findall(r"\b(20\d{2}|19\d{2})\b", edu_text)
-        grad_year = year_match[-1] if year_match else "2026"
+            year_match = re.findall(r"\b(20\d{2}|19\d{2})\b", edu_text)
+            grad_year = year_match[-1] if year_match else ""
+            start_year = year_match[0] if len(year_match) > 1 else (str(int(grad_year) - 4) if grad_year.isdigit() else "")
 
-        institution = "Engineering Institute"
-        for edu_line in sections["education"][:4]:
-            if any(term in edu_line.lower() for term in ["college", "university", "institute", "school", "pccoe", "iit", "nit"]):
-                institution = edu_line
-                break
+            institution = ""
+            for edu_line in sections["education"][:5]:
+                if any(term in edu_line.lower() for term in ["college", "university", "institute", "school", "academy", "pccoe", "iit", "nit", "bits"]):
+                    institution = edu_line.strip()
+                    break
+            if not institution and sections["education"]:
+                institution = sections["education"][0].strip()
 
-        education_items.append({
-            "institution": institution,
-            "degree": f"{degree} in Computer Science",
-            "field_of_study": "Computer Science & Engineering",
-            "start_year": str(int(grad_year) - 4) if grad_year.isdigit() else "2022",
-            "end_year": grad_year,
-            "grade": "First Class with Distinction",
-        })
+            # Extract grade only if explicitly mentioned
+            grade_match = re.search(r"\b(cgpa\s*[:=]?\s*[\d\.]+|gpa\s*[:=]?\s*[\d\.]+|\d{1,2}\.?\d{0,2}%)", edu_text, re.IGNORECASE)
+            grade_val = grade_match.group(0) if grade_match else ""
 
-        # 5. Parse Work Experience
+            education_items.append({
+                "institution": institution,
+                "degree": degree_val,
+                "field_of_study": "Computer Science & Engineering" if "computer" in edu_text.lower() else "",
+                "start_year": start_year,
+                "end_year": grad_year,
+                "grade": grade_val,
+            })
+
+        # 5. Parse Work Experience (Strictly from text, no fabricated internships)
         experience_items: list[dict[str, Any]] = []
         if sections["experience"]:
-            exp_text = "\n".join(sections["experience"][:15])
-            bullets = [l.lstrip("-*• ") for l in sections["experience"] if len(l) > 20 and not l.isupper()][:4]
-            experience_items.append({
-                "company": "Software Engineering Experience",
-                "role": "Software Developer Intern",
-                "start_date": "Jan 2024",
-                "end_date": "Present",
-                "bullet_points": bullets or [
-                    "Engineered performant full-stack modules with automated testing and continuous integration.",
-                    "Collaborated on backend API design, database schemas, and responsive UI components.",
-                ],
-            })
+            exp_lines = [l.strip() for l in sections["experience"] if l.strip()]
+            if exp_lines:
+                # Find bullet points
+                bullets = [l.lstrip("-*• ") for l in exp_lines if (l.startswith(("-", "*", "•")) or len(l) > 25) and not l.isupper()][:5]
+                company_cand = exp_lines[0].lstrip("-*• ")
+                role_cand = exp_lines[1].lstrip("-*• ") if len(exp_lines) > 1 else "Experience"
 
-        # 6. Parse Projects
+                # Extract dates if present
+                date_match = re.findall(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|20\d{2}|Present)\b", " ".join(exp_lines[:4]), re.IGNORECASE)
+                start_date = date_match[0] if date_match else ""
+                end_date = date_match[-1] if len(date_match) > 1 else ""
+
+                experience_items.append({
+                    "company": company_cand,
+                    "role": role_cand,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "bullet_points": bullets,
+                })
+
+        # 6. Parse Projects (Strictly from text, no fabricated bullets)
         project_items: list[dict[str, Any]] = []
         if sections["projects"]:
-            p_lines = sections["projects"]
-            proj_title = p_lines[0] if p_lines else "Full-Stack Web & Mobile Platform"
-            p_bullets = [l.lstrip("-*• ") for l in p_lines[1:6] if len(l) > 20]
-            project_items.append({
-                "title": proj_title.title(),
-                "description": "Full-stack software project extracted from candidate CV.",
-                "tech_stack": detected_skills[:4],
-                "bullet_points": p_bullets or [
-                    "Designed and implemented core architecture with clean modular separation.",
-                    "Integrated RESTful APIs with database migrations and automated verification.",
-                ],
-            })
+            p_lines = [l.strip() for l in sections["projects"] if l.strip()]
+            if p_lines:
+                proj_title = p_lines[0].lstrip("-*• ")
+                p_bullets = [l.lstrip("-*• ") for l in p_lines[1:] if len(l) > 20][:4]
+                project_items.append({
+                    "title": proj_title,
+                    "description": p_bullets[0] if p_bullets else proj_title,
+                    "tech_stack": [s for s in detected_skills if s.lower() in "\n".join(p_lines).lower()][:4] or detected_skills[:4],
+                    "bullet_points": p_bullets,
+                })
 
         summary_text = " ".join(sections["summary"][:4]) if sections["summary"] else (
-            f"Software engineering candidate proficient in {', '.join(detected_skills[:4])} with demonstrated project evidence."
+            f"Candidate profile with technical competencies in {', '.join(detected_skills[:5])}." if detected_skills else ""
         )
 
         return {
@@ -241,7 +254,7 @@ class CVParser:
             "education": education_items,
             "experience": experience_items,
             "projects": project_items,
-            "certifications": [c for c in sections["certifications"] if len(c) > 5][:5],
+            "certifications": [c.strip() for c in sections["certifications"] if len(c.strip()) > 3][:5],
         }
 
 

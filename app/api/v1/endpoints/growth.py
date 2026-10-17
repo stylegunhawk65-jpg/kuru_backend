@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthenticatedUser, get_current_user
 from app.db.session import get_db
+from app.models.job import JobPosting
 from app.models.notification import Reminder
 from app.models.profile import StudentProfile
 from app.models.skill import StudentSkill
@@ -298,6 +299,7 @@ async def get_growth_resources(
     description="Retrieve high-impact engineering projects addressing verified skill gaps.",
 )
 async def get_growth_projects(
+    job_id: str | None = Query(None, description="Optional job ID to target specific listing skill gaps"),
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
@@ -310,6 +312,19 @@ async def get_growth_projects(
         for s in skills
         if s.verification_status in ("repository_supported", "practically_demonstrated")
     }
+
+    # If job_id is provided, resolve missing requirements for the specific listing
+    target_job = None
+    job_missing_skills: list[str] = []
+    if job_id:
+        j_stmt = select(JobPosting).where(JobPosting.id == job_id)
+        target_job = (await db.execute(j_stmt)).scalar_one_or_none()
+        if target_job:
+            reqs = (target_job.required_skills or []) + (target_job.skills or [])
+            for r in reqs:
+                norm_r = r.strip()
+                if norm_r.lower() not in verified_names and norm_r not in job_missing_skills:
+                    job_missing_skills.append(norm_r)
 
     # 2. Gap-driven project templates mapped to production competencies
     gap_templates = [
@@ -333,6 +348,7 @@ async def get_growth_projects(
             ],
             "validation_criteria": "Build and run container; verify health endpoint returns 200 within 5 seconds of startup.",
             "deliverable": "GitHub repository with Dockerfile, docker-compose.yml, and automated CI test workflow.",
+            "starter_repository": "https://github.com/docker/awesome-compose",
             "gap_explanation": "Candidate portfolio lacks verified Dockerfile and container deployment evidence.",
         },
         {
@@ -355,6 +371,7 @@ async def get_growth_projects(
             ],
             "validation_criteria": "Achieve >85% cache hit ratio and sub-5ms latency under simulated burst traffic.",
             "deliverable": "Reusable Python package with comprehensive test suite and benchmark harness.",
+            "starter_repository": "https://github.com/redis/redis-py",
             "gap_explanation": "Candidate portfolio lacks verified Redis caching and in-memory key-value store evidence.",
         },
         {
@@ -377,6 +394,7 @@ async def get_growth_projects(
             ],
             "validation_criteria": "All migrations execute cleanly and rollback without data corruption; query latency p95 < 20ms.",
             "deliverable": "Modular database layer with seed fixtures, migration scripts, and integration tests.",
+            "starter_repository": "https://github.com/sqlalchemy/sqlalchemy",
             "gap_explanation": "Candidate portfolio lacks evidence of relational database design and schema migrations.",
         },
         {
@@ -399,6 +417,7 @@ async def get_growth_projects(
             ],
             "validation_criteria": "Rolling deployments succeed with 0% downtime and HPA scales up replicas automatically under load.",
             "deliverable": "Production-grade Helm chart repository with README documentation and verification instructions.",
+            "starter_repository": "https://github.com/kubernetes/examples",
             "gap_explanation": "Candidate portfolio lacks cluster deployment and container orchestration evidence.",
         },
         {
@@ -421,19 +440,93 @@ async def get_growth_projects(
             ],
             "validation_criteria": "Handle 3,000 req/sec with sub-50ms latency and 100% test coverage.",
             "deliverable": "Complete FastAPI application with full test suite, documentation, and mock dataset.",
+            "starter_repository": "https://github.com/tiangolo/full-stack-fastapi-template",
             "gap_explanation": "Candidate portfolio lacks verified asynchronous REST API implementation evidence.",
         },
     ]
 
-    # 3. Prioritize projects addressing actual missing skills
+    # 3. Prioritize projects addressing actual missing skills (job-specific or aggregate)
     recommended = []
     seen_gaps = set()
 
+    # If job targeting: prioritize templates matching job missing skills
+    if target_job and job_missing_skills:
+        for missing_sk in job_missing_skills:
+            norm_sk = missing_sk.lower()
+            matching_tmpl = next((t for t in gap_templates if norm_sk in t["aliases"] or norm_sk == t["gap"].lower()), None)
+            if matching_tmpl and matching_tmpl["gap"] not in seen_gaps:
+                seen_gaps.add(matching_tmpl["gap"])
+                resources = resource_registry.get_resources_for_skill(matching_tmpl["gap"], limit=2)
+                verified_res = [
+                    {
+                        "title": r.title,
+                        "provider": r.provider,
+                        "url": r.url,
+                        "type": r.resource_type,
+                    }
+                    for r in resources
+                ]
+                recommended.append({
+                    "id": f"job_gap_{matching_tmpl['gap'].lower()}",
+                    "title": matching_tmpl["title"],
+                    "description": matching_tmpl["description"],
+                    "difficulty": matching_tmpl["difficulty"],
+                    "estimated_weeks": matching_tmpl["estimated_weeks"],
+                    "skills": matching_tmpl["skills"],
+                    "key_features": matching_tmpl["key_features"],
+                    "milestones": matching_tmpl["milestones"],
+                    "validation_criteria": matching_tmpl["validation_criteria"],
+                    "deliverable": matching_tmpl["deliverable"],
+                    "starter_repository": matching_tmpl["starter_repository"],
+                    "target_skill_gap": matching_tmpl["gap"],
+                    "gap_explanation": f"Directly addresses required skill '{missing_sk}' for {target_job.title} at {target_job.company}.",
+                    "verified_resources": verified_res,
+                })
+
+            # If not in built-in 5 templates, check if resource_registry has authentic resources for this missing skill
+            elif missing_sk not in seen_gaps:
+                res_list = resource_registry.get_resources_for_skill(missing_sk, limit=2)
+                if res_list:
+                    seen_gaps.add(missing_sk)
+                    verified_res = [
+                        {
+                            "title": r.title,
+                            "provider": r.provider,
+                            "url": r.url,
+                            "type": r.resource_type,
+                        }
+                        for r in res_list
+                    ]
+                    recommended.append({
+                        "id": f"job_gap_{missing_sk.lower().replace(' ', '_')}",
+                        "title": f"{missing_sk} Production Architecture & Integration",
+                        "description": f"Targeted hands-on portfolio implementation demonstrating production {missing_sk} patterns required for {target_job.title} at {target_job.company}.",
+                        "difficulty": "Intermediate",
+                        "estimated_weeks": "2 weeks",
+                        "skills": [missing_sk, "Testing", "Git"],
+                        "key_features": [
+                            f"Production-grade {missing_sk} patterns adhering to official provider recommendations",
+                            "Automated regression test coverage with boundary assertions",
+                            "Modular architecture ready for CI/CD pipeline integration",
+                        ],
+                        "milestones": [
+                            f"Setup baseline project environment with {missing_sk} dependencies",
+                            f"Implement core functionality with comprehensive unit test coverage",
+                            "Document architectural decisions and commit to GitHub",
+                        ],
+                        "validation_criteria": f"Pass test suite with >80% coverage; verify implementation against official {missing_sk} standards.",
+                        "deliverable": f"GitHub repository with comprehensive README, automated CI tests, and implementation guides.",
+                        "starter_repository": f"https://github.com/topics/{missing_sk.lower().replace(' ', '-')}",
+                        "target_skill_gap": missing_sk,
+                        "gap_explanation": f"Directly addresses required skill '{missing_sk}' for {target_job.title} at {target_job.company}.",
+                        "verified_resources": verified_res,
+                    })
+
+    # Standard / Aggregate gap resolution
     for tmpl in gap_templates:
         is_missing = not any(alias in verified_names for alias in tmpl["aliases"])
         if is_missing and tmpl["gap"] not in seen_gaps:
             seen_gaps.add(tmpl["gap"])
-            # Fetch verified genuine resources
             resources = resource_registry.get_resources_for_skill(tmpl["gap"], limit=2)
             verified_res = [
                 {
@@ -455,6 +548,7 @@ async def get_growth_projects(
                 "milestones": tmpl["milestones"],
                 "validation_criteria": tmpl["validation_criteria"],
                 "deliverable": tmpl["deliverable"],
+                "starter_repository": tmpl["starter_repository"],
                 "target_skill_gap": tmpl["gap"],
                 "gap_explanation": tmpl["gap_explanation"],
                 "verified_resources": verified_res,
@@ -462,7 +556,7 @@ async def get_growth_projects(
             if len(recommended) >= 3:
                 break
 
-    # If candidate already has most skills verified, fill remaining slots with advanced engineering projects
+    # Fallback to advanced engineering projects if few gaps remain
     if len(recommended) < 3:
         for tmpl in gap_templates:
             if tmpl["gap"] not in seen_gaps:
@@ -488,6 +582,7 @@ async def get_growth_projects(
                     "milestones": tmpl["milestones"],
                     "validation_criteria": tmpl["validation_criteria"],
                     "deliverable": tmpl["deliverable"],
+                    "starter_repository": tmpl["starter_repository"],
                     "target_skill_gap": tmpl["gap"],
                     "gap_explanation": tmpl["gap_explanation"],
                     "verified_resources": verified_res,

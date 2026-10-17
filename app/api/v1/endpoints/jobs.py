@@ -24,12 +24,103 @@ from app.schemas.job import (
     SavedJobUpdate,
     SyncTriggerResponse,
 )
+from pydantic import BaseModel, Field
 from app.services.job_sources.aggregator import job_source_manager
 from app.services.matcher import calculate_job_match
 from app.services.notification_service import notification_service
 
 logger = logging.getLogger("kuru.jobs")
 router = APIRouter()
+
+
+class DemoActionRequest(BaseModel):
+    """Payload for actions triggered from Demo 100% match notification."""
+
+    notification_id: str
+    action: str  # "APPROVE_CV", "REJECT", "UPDATE_CV"
+    confirmed_reviewed: bool = False
+    cv_id: str | None = None
+
+
+class DemoCVUpdateRequest(BaseModel):
+    """Payload to update demo CV text and competencies."""
+
+    summary: str | None = None
+    skills: list[str] | None = None
+    target_role: str | None = None
+
+
+@router.post(
+    "/demo/match-100",
+    response_model=dict[str, Any],
+    summary="Trigger Dedicated Demo 100% Match Scenario",
+    description="Triggers a controlled demo match event with genuine 100% calculation, isolated demo data, and actionable notification.",
+)
+async def trigger_demo_100_match(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Execute isolated demo 100% match flow and return computed result and notification."""
+    from app.services.demo_match_service import demo_match_service
+
+    return await demo_match_service.trigger_demo_100_match(db, current_user.uid)
+
+
+@router.post(
+    "/demo/action",
+    response_model=dict[str, Any],
+    summary="Perform Action on Demo Match Notification",
+    description="Executes APPROVE_CV, REJECT, or UPDATE_CV action from actionable notification.",
+)
+async def handle_demo_action(
+    payload: DemoActionRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Execute actionable notification response with safety guarantees."""
+    from app.services.demo_match_service import demo_match_service
+
+    return await demo_match_service.handle_demo_action(
+        db=db,
+        firebase_uid=current_user.uid,
+        notification_id=payload.notification_id,
+        action=payload.action,
+        confirmed_reviewed=payload.confirmed_reviewed,
+    )
+
+
+@router.get(
+    "/demo/cv",
+    response_model=dict[str, Any],
+    summary="Get Isolated Demo CV",
+    description="Retrieve current demo CV state without touching real CVs.",
+)
+async def get_demo_cv(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Retrieve isolated demo CV fixture."""
+    from app.services.demo_match_service import demo_match_service
+
+    return demo_match_service.get_demo_cv(current_user.uid)
+
+
+@router.put(
+    "/demo/cv",
+    response_model=dict[str, Any],
+    summary="Update Isolated Demo CV",
+    description="Update demo CV content (e.g. summary, skills) and increment version to v1.1-demo.",
+)
+async def update_demo_cv(
+    payload: DemoCVUpdateRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Update isolated demo CV and save as new version."""
+    from app.services.demo_match_service import demo_match_service
+
+    return demo_match_service.update_demo_cv(
+        current_user.uid,
+        payload.model_dump(exclude_unset=True),
+    )
 
 
 @router.get(
@@ -304,6 +395,10 @@ async def list_jobs(
                 matched_skills=match_result.matched_skills,
                 missing_skills=match_result.missing_skills,
                 match_reasons=match_result.match_reasons,
+                demonstrated_skills=match_result.demonstrated_skills,
+                repo_supported_skills=match_result.repo_supported_skills,
+                unverified_matched_skills=match_result.unverified_matched_skills,
+                missing_skills_breakdown=match_result.missing_skills_breakdown,
                 is_saved=job.id in saved_ids,
             )
         )
@@ -391,6 +486,10 @@ async def get_job_details(
         matched_skills=match_result.matched_skills,
         missing_skills=match_result.missing_skills,
         match_reasons=match_result.match_reasons,
+        demonstrated_skills=match_result.demonstrated_skills,
+        repo_supported_skills=match_result.repo_supported_skills,
+        unverified_matched_skills=match_result.unverified_matched_skills,
+        missing_skills_breakdown=match_result.missing_skills_breakdown,
         is_saved=is_saved,
     )
 
@@ -491,3 +590,21 @@ async def unsave_job(
     await db.delete(record)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{id}/recommended-projects",
+    response_model=list[dict[str, Any]],
+    status_code=status.HTTP_200_OK,
+    summary="Get Targeted Growth Projects for Job Listing",
+    description="Retrieve high-impact engineering projects targeting missing skills of this specific job listing.",
+)
+async def get_job_recommended_projects(
+    id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Return projects mapped to the missing requirements of this job."""
+    from app.api.v1.endpoints.growth import get_growth_projects
+    return await get_growth_projects(job_id=id, current_user=current_user, db=db)
+

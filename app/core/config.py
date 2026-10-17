@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str | None = None
     GITHUB_CLIENT_SECRET: str | None = None
 
+    # LinkedIn Official OAuth 2.0 Integration
+    LINKEDIN_CLIENT_ID: str | None = None
+    LINKEDIN_CLIENT_SECRET: str | None = None
+    LINKEDIN_REDIRECT_URI: str = "http://127.0.0.1:8000/api/v1/profiles/linkedin/oauth/callback"
+
     # Job & Internship Data Sources (Optional credentials for partner APIs)
     ADZUNA_APP_ID: str | None = None
     ADZUNA_APP_KEY: str | None = None
