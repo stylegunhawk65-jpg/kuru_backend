@@ -266,7 +266,7 @@ class _ResumeScreenState extends State<ResumeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          const Text('Select Version: ', style: TextStyle(fontWeight: FontWeight.w640, fontSize: 13)),
+          const Text('Select Version: ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
           const SizedBox(width: 8),
           Expanded(
             child: DropdownButton<String>(

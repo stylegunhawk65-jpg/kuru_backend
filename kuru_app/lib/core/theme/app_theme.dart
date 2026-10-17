@@ -9,6 +9,7 @@ class AppTheme {
   static const Color errorColor = Color(0xFFEF4444); // Rose
   static const Color darkBackground = Color(0xFF0F172A); // Slate 900
   static const Color darkSurface = Color(0xFF1E293B); // Slate 800
+  static const Color textSecondary = Color(0xFF64748B); // Slate 500
 
   static ThemeData get lightTheme {
     return ThemeData(
